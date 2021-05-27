@@ -26,6 +26,8 @@ You can install `napari-ome-zarr` via [pip]:
 
     pip install napari-ome-zarr
 
+## Usage
+
 Napari will use `ome-zarr` to open images that the plugin recognises as ome-zarr.
 The image metadata from OMERO will be used to set channel names and rendering settings
 in napari::
