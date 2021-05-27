@@ -20,6 +20,31 @@ class TestNapari:
         self.path = tmpdir.mkdir("data")
         create_zarr(str(self.path), astronaut, "astronaut")
 
+    def test_get_reader_hit(self):
+        reader = napari_get_reader(str(self.path))
+        assert reader is not None
+        assert callable(reader)
+
+    def test_reader(self):
+        reader = napari_get_reader(str(self.path))
+        results = reader(str(self.path))
+        assert len(results) == 2
+        image, label = results
+        assert isinstance(image[0], list)
+        assert isinstance(image[1], dict)
+        assert image[1]["channel_axis"] == 1
+        assert image[1]["name"] == ["Red", "Green", "Blue"]
+
+    def test_get_reader_with_list(self):
+        # a better test here would use real data
+        reader = napari_get_reader([str(self.path)])
+        assert reader is not None
+        assert callable(reader)
+
+    def test_get_reader_pass(self):
+        reader = napari_get_reader("fake.file")
+        assert reader is None
+
     def assert_layers(self, layers, visible_1, visible_2):
         # TODO: check name
 

@@ -23,7 +23,7 @@ except ImportError:
         return func
 
 
-LOGGER = logging.getLogger("ome_zarr.napari")
+LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 
 @napari_hook_implementation
