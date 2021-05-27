@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from ome_zarr.data import astronaut, create_zarr
-from ome_zarr.napari import napari_get_reader
+from napari_ome_zarr._reader import napari_get_reader
 
 
 @pytest.fixture(autouse=True, scope="session")

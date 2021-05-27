@@ -8,10 +8,10 @@ import logging
 import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
-from .data import CHANNEL_DIMENSION
-from .io import parse_url
-from .reader import Label, Node, Reader
-from .types import LayerData, PathLike, ReaderFunction
+from ome_zarr.data import CHANNEL_DIMENSION
+from ome_zarr.io import parse_url
+from ome_zarr.reader import Label, Node, Reader
+from ome_zarr.types import LayerData, PathLike, ReaderFunction
 
 try:
     from napari_plugin_engine import napari_hook_implementation
