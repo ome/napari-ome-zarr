@@ -60,9 +60,9 @@ class TestNapari:
         not sys.platform.startswith("darwin"),
         reason="Qt builds are failing on Windows and Ubuntu",
     )
-    def test_viewer(self, make_test_viewer):
+    def test_viewer(self, make_napari_viewer):
         """example of testing the viewer."""
-        viewer = make_test_viewer()
+        viewer = make_napari_viewer()
 
         shapes = [(4000, 3000), (2000, 1500), (1000, 750), (500, 375)]
         np.random.seed(0)
@@ -72,7 +72,7 @@ class TestNapari:
 
         # Set canvas size to target amount
         viewer.window.qt_viewer.view.canvas.size = (800, 600)
-        list(viewer.window.qt_viewer.layer_to_visual.values())[0].on_draw(None)
+        viewer.window.qt_viewer.on_draw(None)
 
         # Check that current level is first large enough to fill the canvas with
         # a greater than one pixel depth
