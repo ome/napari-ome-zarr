@@ -52,7 +52,9 @@ When the labels group metadata additionally contains `"rgba"` and `"properties"`
 the labels will be given appropriate colors and the properties will be displayed 
 in the status bar.
 
-For more detail on command-line usage of `ome-zarr` and its utility functions, please see our [package documentation](https://pypi.org/project/ome-zarr/).
+Working with ome-zarr images can be more convenient using the command-line interface
+and utility functions of our associated library `ome-zarr`. For more information 
+please see the [package documentation](https://pypi.org/project/ome-zarr/) for `ome-zarr`.
 
 # Getting Help
 
