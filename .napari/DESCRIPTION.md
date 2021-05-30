@@ -7,7 +7,7 @@ will inspect the `.zattrs` metadata provided and pass any relevant metadata, inc
 
 The example above uses the image at http://idr.openmicroscopy.org/webclient/?show=image-6001240
 
-# Who is This For?
+# Supported Data
 
 This plugin is designed to allow bioimaging researchers and analysts to explore their
 multi-resolution images stored in Zarr filesets (according to the [OME zarr spec](https://ngff.openmicroscopy.org/latest/))
@@ -18,7 +18,7 @@ well-formed `.zattrs` and `.zgroup` files, as well as the appropriate directory
 hierarchy as described in the [spec](https://ngff.openmicroscopy.org/latest/). 
 The image metadata from OMERO will be used to set channel names, colormaps and rendering settings in napari.
 
-# Usage
+# Quickstart
 
 You can open local or remote images using `napari` at the terminal and the path to your file:
 
