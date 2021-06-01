@@ -26,6 +26,29 @@ You can install `napari-ome-zarr` via [pip]:
 
     pip install napari-ome-zarr
 
+## Usage
+
+Napari will use `ome-zarr` to open images that the plugin recognises as ome-zarr.
+The image metadata from OMERO will be used to set channel names and rendering settings
+in napari::
+
+    $ napari 'https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/'
+
+    # Also works with local files
+    $ napari 6001240.zarr
+
+OR in python::
+
+    import napari
+    with napari.gui_qt():
+        viewer = napari.Viewer()
+        viewer.open('https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/')
+
+If single zarray is passed to the plugin, it will be opened without the use of
+the metadata::
+
+    $ napari '/tmp/6001240.zarr/0'
+
 ## Contributing
 
 Contributions are very welcome. Tests can be run with [tox], please ensure
