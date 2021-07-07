@@ -50,7 +50,18 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
 
         for node in nodes:
             data: List[Any] = node.data
+
+            # check if this node has a multiscale spec and try to load the axes
+            # NOTE this was the best way I found for getting the axes metadata, which is still very cumbersome
+            axes = None
+            for spec in node.specs:
+                axes = spec.lookup('multiscales', [{}])[0].get('axes', None)
+                if axes is not None:
+                    break
+
+            # NOTE the metadata seems to be always empty, why do we even have it?
             metadata: Dict[str, Any] = node.metadata
+
             if data is None or len(data) < 1:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
@@ -63,8 +74,17 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     if "colormap" in metadata:
                         del metadata["colormap"]
 
-                elif shape[CHANNEL_DIMENSION] > 1:
+                # multiscale spec >= 0.3 has the axes list that can be used to determine
+                # if there is a channel axis, and which axis it is
+                elif axes is not None and "c" in axes:
+                    channel_dimension = axes.index("c")
+                    if shape[channel_dimension] > 1:
+                        metadata["channel_axis"] = channel_dimension
+
+                # multiscale spec < 0.3 is 5d and has a hardcoded chanel axis
+                elif axes is None and shape[CHANNEL_DIMENSION] > 1:
                     metadata["channel_axis"] = CHANNEL_DIMENSION
+
                 else:
                     for x in ("name", "visible", "contrast_limits", "colormap"):
                         if x in metadata:
