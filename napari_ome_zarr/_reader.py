@@ -63,9 +63,14 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     if "colormap" in metadata:
                         del metadata["colormap"]
 
+                elif "axes" in metadata and "c" in metadata["axes"]:
+                    metadata["channel_axis"] = metadata["axes"].index("c")
+                    del metadata["axes"]
                 elif shape[CHANNEL_DIMENSION] > 1:
+                    # versions of ome-zarr-py before v0.3 support
                     metadata["channel_axis"] = CHANNEL_DIMENSION
                 else:
+                    # single channel image, so metadata just needs single items (not lists)
                     for x in ("name", "visible", "contrast_limits", "colormap"):
                         if x in metadata:
                             try:
