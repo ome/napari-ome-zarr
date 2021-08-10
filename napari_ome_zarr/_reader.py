@@ -8,6 +8,8 @@ import logging
 import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
+from vispy.color import Colormap
+
 from ome_zarr.data import CHANNEL_DIMENSION
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
@@ -72,6 +74,12 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                                 metadata[x] = metadata[x][0]
                             except Exception:
                                 del metadata[x]
+
+                # Handle the removal of vispy requirement from ome-zarr-py
+                cms = metadata.get("colormap", [])
+                for idx, cm in enumerate(cms):
+                    if not isinstance(cm, Colormap):
+                        cms[idx] = Colormap(cm)
 
                 rv: LayerData = (data, metadata, layer_type)
                 LOGGER.debug(f"Transformed: {rv}")
