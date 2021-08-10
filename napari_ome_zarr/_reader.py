@@ -25,7 +25,8 @@ except ImportError:
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
-METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap")
+METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
+                 "metadata", "properties")
 
 @napari_hook_implementation
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -61,6 +62,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 layer_type: str = "image"
                 if node.load(Label):
                     layer_type = "labels"
+                    for x in METADATA_KEYS:
+                        if x in node.metadata:
+                            metadata[x] = node.metadata[x]
                 else:
                     channel_axis = None
                     if "axes" in node.metadata:
@@ -75,7 +79,8 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         # multi-channel; Copy known metadata values
                         metadata["channel_axis"] = channel_axis
                         for x in METADATA_KEYS:
-                            metadata[x] = node.metadata[x]
+                            if x in node.metadata:
+                                metadata[x] = node.metadata[x]
                     else:
                         # single channel image, so metadata just needs single items (not lists)
                         for x in METADATA_KEYS:
