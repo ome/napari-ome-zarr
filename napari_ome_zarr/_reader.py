@@ -27,6 +27,8 @@ except ImportError:
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
+METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
+                 "metadata", "properties")
 
 @napari_hook_implementation
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -52,7 +54,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
 
         for node in nodes:
             data: List[Any] = node.data
-            metadata: Dict[str, Any] = node.metadata
+            metadata: Dict[str, Any] = {}
             if data is None or len(data) < 1:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
@@ -62,18 +64,33 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 layer_type: str = "image"
                 if node.load(Label):
                     layer_type = "labels"
-                    if "colormap" in metadata:
-                        del metadata["colormap"]
-
-                elif shape[CHANNEL_DIMENSION] > 1:
-                    metadata["channel_axis"] = CHANNEL_DIMENSION
+                    for x in METADATA_KEYS:
+                        if x in node.metadata:
+                            metadata[x] = node.metadata[x]
                 else:
-                    for x in ("name", "visible", "contrast_limits", "colormap"):
-                        if x in metadata:
-                            try:
-                                metadata[x] = metadata[x][0]
-                            except Exception:
-                                del metadata[x]
+                    channel_axis = None
+                    if "axes" in node.metadata:
+                        # version 0.3 or greater. NB: is 'axes' optional?
+                        if "c" in node.metadata["axes"]:
+                            channel_axis = node.metadata["axes"].index("c")
+                    elif shape[CHANNEL_DIMENSION] > 1:
+                        # versions of ome-zarr-py before v0.3 support
+                        channel_axis = CHANNEL_DIMENSION
+
+                    if channel_axis is not None:
+                        # multi-channel; Copy known metadata values
+                        metadata["channel_axis"] = channel_axis
+                        for x in METADATA_KEYS:
+                            if x in node.metadata:
+                                metadata[x] = node.metadata[x]
+                    else:
+                        # single channel image, so metadata just needs single items (not lists)
+                        for x in METADATA_KEYS:
+                            if x in node.metadata:
+                                try:
+                                    metadata[x] = node.metadata[x][0]
+                                except Exception:
+                                    pass
 
                 # Handle the removal of vispy requirement from ome-zarr-py
                 cms = metadata.get("colormap", [])
