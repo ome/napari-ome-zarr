@@ -28,7 +28,7 @@ except ImportError:
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
-                 "metadata", "properties")
+                 "metadata")
 
 @napari_hook_implementation
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -46,6 +46,40 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
         return transform(reader())
     # Ignoring this path
     return None
+
+
+def transform_properties(props=None):
+    """
+    Transform properties
+
+    Transform a dict of {label_id : {key: value, key2: value2}}
+    with a key for every LABEL
+    into a dict of a key for every VALUE, with a list of values for each
+    {
+        "index": [1381342, 1381343...]
+        "omero:roiId": [1381342, 1381343...],
+        "omero:shapeId": [1682567, 1682567...]
+    }
+    """
+    if props is None:
+        return None
+
+    properties: Dict[str, List] = {}
+
+    # First, create lists for all existing keys...
+    for label_id, props_dict in props.items():
+        for key in props_dict.keys():
+            properties[key] = []
+
+    keys = list(properties.keys())
+
+    properties["index"] = []
+    for label_id, props_dict in props.items():
+        properties["index"].append(label_id)
+        # ...in case some objects don't have all the keys
+        for key in keys:
+            properties[key].append(props_dict.get(key, None))
+    return properties
 
 
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
@@ -97,6 +131,10 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 for idx, cm in enumerate(cms):
                     if not isinstance(cm, Colormap):
                         cms[idx] = Colormap(cm)
+
+                properties = transform_properties(node.metadata.get("properties"))
+                if properties is not None:
+                    metadata["properties"] = properties
 
                 rv: LayerData = (data, metadata, layer_type)
                 LOGGER.debug(f"Transformed: {rv}")
