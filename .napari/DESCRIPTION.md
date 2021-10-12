@@ -5,7 +5,7 @@ will inspect the `.zattrs` metadata provided and pass any relevant metadata, inc
 
 ![Opening an ome-zarr image in napari](https://i.imgur.com/tf9IqRA.gif)
 
-The example above uses the image at http://idr.openmicroscopy.org/webclient/?show=image-6001240
+The example above uses the image at https://idr.openmicroscopy.org/webclient/?show=image-6001240
 
 # Supported Data
 
@@ -59,7 +59,7 @@ please see the [package documentation](https://pypi.org/project/ome-zarr/) for `
 # Getting Help
 
 If you discover a bug with the plugin, or would like to request a new feature, please
-raise an issue on our repository at https://github.com/ome/ome-zarr-py.
+raise an issue on our repository at https://github.com/ome/napari-ome-zarr.
 
 If you would like assistance with using the plugin, or converting images to
 ome-zarr format, please reach out on [image.sc](https://forum.image.sc/).
