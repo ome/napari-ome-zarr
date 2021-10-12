@@ -17,27 +17,36 @@ def load_napari_conftest(pytestconfig):
 class TestNapari:
     @pytest.fixture(autouse=True)
     def initdir(self, tmpdir):
-        self.path = tmpdir.mkdir("data")
-        create_zarr(str(self.path), astronaut, "astronaut")
+        self.path_3d = tmpdir.mkdir("data_3d")
+        create_zarr(str(self.path_3d), astronaut, "astronaut")
+        self.path_2d = tmpdir.mkdir("data_2d")
+        create_zarr(str(self.path_2d))
 
     def test_get_reader_hit(self):
-        reader = napari_get_reader(str(self.path))
+        reader = napari_get_reader(str(self.path_3d))
         assert reader is not None
         assert callable(reader)
 
-    def test_reader(self):
-        reader = napari_get_reader(str(self.path))
-        results = reader(str(self.path))
+    @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
+    def test_reader(self, path):
+        path_str = str(getattr(self, path))
+        reader = napari_get_reader(path_str)
+        results = reader(path_str)
         assert len(results) == 2
         image, label = results
         assert isinstance(image[0], list)
         assert isinstance(image[1], dict)
-        assert image[1]["channel_axis"] == 0
-        assert image[1]["name"] == ["Red", "Green", "Blue"]
+        if path == "path_3d":
+            assert image[1]["channel_axis"] == 0
+            assert image[1]["name"] == ["Red", "Green", "Blue"]
+        else:
+            assert "channel_axis" not in image[1]
+            assert image[1]["name"] == "channel_0"
 
-    def test_get_reader_with_list(self):
+    @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
+    def test_get_reader_with_list(self, path):
         # a better test here would use real data
-        reader = napari_get_reader([str(self.path)])
+        reader = napari_get_reader([str(getattr(self, path))])
         assert reader is not None
         assert callable(reader)
 
@@ -45,17 +54,23 @@ class TestNapari:
         reader = napari_get_reader("fake.file")
         assert reader is None
 
-    def assert_layers(self, layers, visible_1, visible_2):
+    def assert_layers(self, layers, visible_1, visible_2, path="path_3d"):
         # TODO: check name
 
         assert len(layers) == 2
         image, label = layers
 
         data, metadata, layer_type = self.assert_layer(image)
-        assert 0 == metadata["channel_axis"]
-        assert ["Red", "Green", "Blue"] == metadata["name"]
-        assert [[0, 255]] * 3 == metadata["contrast_limits"]
-        assert [visible_1] * 3 == metadata["visible"]
+        if path == "path_3d":
+            assert 0 == metadata["channel_axis"]
+            assert ["Red", "Green", "Blue"] == metadata["name"]
+            assert [[0, 255]] * 3 == metadata["contrast_limits"]
+            assert [visible_1] * 3 == metadata["visible"]
+        else:
+            assert "channel_axis" not in metadata
+            assert metadata["name"] == "channel_0"
+            assert metadata["contrast_limits"] == [0, 255]
+            assert metadata["visible"] == visible_1
 
         data, metadata, layer_type = self.assert_layer(label)
         assert visible_2 == metadata["visible"]
@@ -67,17 +82,18 @@ class TestNapari:
         assert layer_type in ("image", "labels")
         return data, metadata, layer_type
 
-    def test_image(self):
-        layers = napari_get_reader(str(self.path))()
-        self.assert_layers(layers, True, False)
+    @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
+    def test_image(self, path):
+        layers = napari_get_reader(str(getattr(self, path)))()
+        self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
-        filename = str(self.path.join("labels"))
+        filename = str(self.path_3d.join("labels"))
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
     def test_label(self):
-        filename = str(self.path.join("labels", "astronaut"))
+        filename = str(self.path_3d.join("labels", "astronaut"))
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
