@@ -8,6 +8,7 @@ import logging
 import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
+import numpy as np
 from vispy.color import Colormap
 
 from ome_zarr.data import CHANNEL_DIMENSION
@@ -101,6 +102,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
+                    if "axes" in node.metadata and "c" in node.metadata["axes"]:
+                        c_index = node.metadata["axes"].index("c")
+                        data = [np.squeeze(level, axis=c_index) for level in node.data]
                 else:
                     channel_axis = None
                     if "axes" in node.metadata:
