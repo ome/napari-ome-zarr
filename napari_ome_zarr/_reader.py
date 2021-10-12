@@ -111,6 +111,12 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         # versions of ome-zarr-py before v0.3 support
                         channel_axis = CHANNEL_DIMENSION
 
+                    # Handle the removal of vispy requirement from ome-zarr-py
+                    cms = node.metadata.get("colormap", [])
+                    for idx, cm in enumerate(cms):
+                        if not isinstance(cm, Colormap):
+                            cms[idx] = Colormap(cm)
+
                     if channel_axis is not None:
                         # multi-channel; Copy known metadata values
                         metadata["channel_axis"] = channel_axis
@@ -125,12 +131,6 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                                     metadata[x] = node.metadata[x][0]
                                 except Exception:
                                     pass
-
-                # Handle the removal of vispy requirement from ome-zarr-py
-                cms = metadata.get("colormap", [])
-                for idx, cm in enumerate(cms):
-                    if not isinstance(cm, Colormap):
-                        cms[idx] = Colormap(cm)
 
                 properties = transform_properties(node.metadata.get("properties"))
                 if properties is not None:
