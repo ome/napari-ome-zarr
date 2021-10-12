@@ -32,7 +32,7 @@ class TestNapari:
         image, label = results
         assert isinstance(image[0], list)
         assert isinstance(image[1], dict)
-        assert image[1]["channel_axis"] == 1
+        assert image[1]["channel_axis"] == 0
         assert image[1]["name"] == ["Red", "Green", "Blue"]
 
     def test_get_reader_with_list(self):
@@ -52,9 +52,9 @@ class TestNapari:
         image, label = layers
 
         data, metadata, layer_type = self.assert_layer(image)
-        assert 1 == metadata["channel_axis"]
+        assert 0 == metadata["channel_axis"]
         assert ["Red", "Green", "Blue"] == metadata["name"]
-        assert [[0, 1]] * 3 == metadata["contrast_limits"]
+        assert [[0, 255]] * 3 == metadata["contrast_limits"]
         assert [visible_1] * 3 == metadata["visible"]
 
         data, metadata, layer_type = self.assert_layer(label)
