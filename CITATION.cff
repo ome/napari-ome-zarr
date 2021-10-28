@@ -1,0 +1,32 @@
+# YAML 1.2
+# Metadata for citation of this software according to the CFF format (https://citation-file-format.github.io/)
+cff-version: 1.0.3
+message: If you use this software, please cite it using these metadata.
+# FIXME title as repository name might not be the best name, please make human readable
+title: 'ome-zarr-py: Experimental implementation of next-generation file format (NGFF) specifications for storing bioimaging data in the cloud.'
+doi: 10.5281/zenodo.4113931
+# FIXME splitting of full names is error prone, please check if given/family name are correct
+authors:
+- given-names: Josh
+  family-names: Moore
+  affiliation: '@openmicroscopy'
+- given-names: Will
+  family-names: Moore
+  affiliation: '@openmicroscopy'
+- given-names: Jean-Marie
+  family-names: Burel
+- given-names: Simon
+  family-names: Li
+- given-names: Eric
+  family-names: Perlman
+  affiliation: Yikes LLC
+- given-names: Juan
+  family-names: Nunez-Iglesias
+  affiliation: Monash Micro Imaging, Monash University
+- given-names: Talley
+  family-names: Lambert
+  affiliation: Harvard University
+- given-names: Heath
+  family-names: Patterson
+  affiliation: Vanderbilt University
+repository-code: https://github.com/ome/ome-zarr-py
