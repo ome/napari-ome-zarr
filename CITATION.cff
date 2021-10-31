@@ -2,8 +2,9 @@
 # Metadata for citation of this software according to the CFF format (https://citation-file-format.github.io/)
 cff-version: 1.0.3
 message: If you use this software, please cite it using these metadata.
-title: 'napari-ome-zarr'
+title: napari-ome-zarr
 doi: 10.5281/zenodo.5620852
+authors:
 - given-names: Josh
   family-names: Moore
   affiliation: '@openmicroscopy'
@@ -16,3 +17,5 @@ doi: 10.5281/zenodo.5620852
 - given-names: Draga
   family-names: Doncila Pop
 repository-code: https://github.com/ome/napari-ome-zarr
+version: 0.3.0
+date-released: 2021-10-29
