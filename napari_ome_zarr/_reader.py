@@ -28,8 +28,9 @@ except ImportError:
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
+# NB: color for labels, colormap for images
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
-                 "metadata")
+                 "color", "metadata")
 
 @napari_hook_implementation
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
