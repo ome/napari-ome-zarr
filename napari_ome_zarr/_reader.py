@@ -36,7 +36,7 @@ METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     """Returns a reader for supported paths that include IDR ID.
 
-    - URL of the form: https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
+    - URL of the form: https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
     """
     if isinstance(path, list):
         if len(path) > 1:
