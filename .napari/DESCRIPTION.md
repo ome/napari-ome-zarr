@@ -23,7 +23,7 @@ The image metadata from OMERO will be used to set channel names, colormaps and r
 You can open local or remote images using `napari` at the terminal and the path to your file:
 
 ```
-$ napari 'https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/'
+$ napari 'https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/'
 
 # also works with local files
 $ napari 6001240.zarr
@@ -35,7 +35,7 @@ OR in python:
 import napari
 
 viewer = napari.Viewer()
-viewer.open('https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/')
+viewer.open('https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/')
 napari.run()
 ```
 If a single zarray is passed to the plugin, it will be opened without the use of
