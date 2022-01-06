@@ -3,7 +3,7 @@
 cff-version: 1.0.3
 message: If you use this software, please cite it using these metadata.
 title: napari-ome-zarr
-doi: 10.5281/zenodo.5620852
+doi: 10.5281/zenodo.5620851
 authors:
 - given-names: Josh
   family-names: Moore
@@ -17,5 +17,3 @@ authors:
 - given-names: Draga
   family-names: Doncila Pop
 repository-code: https://github.com/ome/napari-ome-zarr
-version: 0.3.0
-date-released: 2021-10-29
