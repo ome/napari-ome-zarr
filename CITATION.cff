@@ -17,3 +17,42 @@ authors:
 - given-names: Draga
   family-names: Doncila Pop
 repository-code: https://github.com/ome/napari-ome-zarr
+references:
+  - type: article
+    title: "OME-NGFF: a next-generation file format for expanding bioimaging data-access strategies "
+    journal: Nature Methods
+    volume: 18
+    number: 12
+    pages: 1496–1498
+    doi: 10.1038/s41592-021-01326-w
+    year: 2021
+    date-published: 2021-11-29
+    authors:
+      - family-names: Moore
+        given-names: Josh
+      - family-names: Allan
+        given-names: Chris
+      - family-names: Besson
+        given-names: Sébastien
+      - family-names: Burel
+        given-names: Jean-Marie
+      - family-names: Diel
+        given-names: Erin
+      - family-names: Gault
+        given-names: David
+      - family-names: Kozlowski
+        given-names: Kevin
+      - family-names: Lindner
+        given-names: Dominik
+      - family-names: Linkert
+        given-names: Melissa
+      - family-names: Manz
+        given-names: Trevor
+      - family-names: Moore
+        given-names: Will
+      - family-names: Pape
+        given-names: Constantin
+      - family-names: Tischer
+        given-names: Christian
+      - family-names: Swedlow
+        given-names: Jason
