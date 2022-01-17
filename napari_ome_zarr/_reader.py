@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 import numpy as np
 from vispy.color import Colormap
 
-from ome_zarr.data import CHANNEL_DIMENSION
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
@@ -95,27 +94,25 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
                 LOGGER.debug(f"transforming {node}")
-                shape = data[0].shape
 
                 layer_type: str = "image"
+                channel_axis = None
+                try:
+                    ch_types = [axis["type"] for axis in node.metadata["axes"]]
+                    if "channel" in ch_types:
+                        channel_axis = ch_types.index("channel")
+                except:
+                    LOGGER.error("Error reading axes: Please update ome-zarr")
+
                 if node.load(Label):
                     layer_type = "labels"
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
-                    if "axes" in node.metadata and "c" in node.metadata["axes"]:
-                        c_index = node.metadata["axes"].index("c")
-                        data = [np.squeeze(level, axis=c_index) for level in node.data]
+                    if channel_axis is not None:
+                        data = [np.squeeze(level, axis=channel_axis) for level in node.data]
                 else:
-                    channel_axis = None
-                    if "axes" in node.metadata:
-                        # version 0.3 or greater. NB: is 'axes' optional?
-                        if "c" in node.metadata["axes"]:
-                            channel_axis = node.metadata["axes"].index("c")
-                    elif shape[CHANNEL_DIMENSION] > 1:
-                        # versions of ome-zarr-py before v0.3 support
-                        channel_axis = CHANNEL_DIMENSION
-
+                    LOGGER.debug("napari-ome-zarr: node.metadata: %s" % node.metadata)
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
