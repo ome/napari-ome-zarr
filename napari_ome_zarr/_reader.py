@@ -83,11 +83,33 @@ def transform_properties(props=None):
     return properties
 
 
+def transform_scale(node_metadata, metadata, channel_axis, shape):
+    """
+    e.g. transformation is {"axisIndices": [1, 2, 3], "scale": [0.2, 0.06, 0.06]}
+    Get a list of these for each level in data. Just use first?
+    """
+    if "transformations" in node_metadata:
+        level_0_transforms = node_metadata["transformations"][0]
+        for transf in level_0_transforms:
+            if "scale" in transf and "axisIndices" in transf:
+                axis_indices = transf["axisIndices"]
+                scale = transf["scale"]
+                scale_by_axis = {}
+                for axis, scale_val in zip(axis_indices, scale):
+                    scale_by_axis[axis] = scale_val
+                # for each dimension of the data (not including channels), we want
+                # scale value, or 1 if not found
+                scale_values = []
+                for dim in range(len(shape)):
+                    if dim != channel_axis:
+                        scale_values.append(scale_by_axis.get(dim, 1))
+                if len(scale_values) > 0:
+                    metadata["scale"] = tuple(scale_values)
+
+
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
-
-        image_scale_values = None
 
         for node in nodes:
             data: List[Any] = node.data
@@ -106,35 +128,11 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 except:
                     LOGGER.error("Error reading axes: Please update ome-zarr")
 
-                """
-                e.g. transformation is {"axisIndices": [1, 2, 3], "scale": [0.2, 0.06, 0.06]}
-                Get a list of these for each level in data. Just use first?
-                """
-                if "transformations" in node.metadata:
-                    level_0_transforms = node.metadata["transformations"][0]
-                    for transf in level_0_transforms:
-                        if "scale" in transf and "axisIndices" in transf:
-                            axis_indices = transf["axisIndices"]
-                            scale = transf["scale"]
-                            scale_by_axis = {}
-                            for axis, scale_val in zip(axis_indices, scale):
-                                scale_by_axis[axis] = scale_val
-                            # for each dimension of the data (not including channels), we want
-                            # scale value, or 1 if not found
-                            scale_values = []
-                            for dim in range(len(data[0].shape)):
-                                if dim != channel_axis:
-                                    scale_values.append(scale_by_axis.get(dim, -1))
-                            if len(scale_values) > 0:
-                                # cache scale to apply to other layers with no scale
-                                if image_scale_values is None:
-                                    image_scale_values = scale_values
-                                metadata["scale"] = tuple(scale_values)
-                elif image_scale_values is not None:
-                    # If layer has no scale info, apply existing image_scale_values
+                transform_scale(node.metadata, metadata, channel_axis, data[0].shape)
+                # If layer has no scale info, try apply scale from first layer
+                if "scale" not in metadata and len(results) and "scale" in results[0][1]:
                     # e.g. labels layer should be scaled to match the image
-                    metadata["scale"] = tuple(image_scale_values)
-
+                    metadata["scale"] = results[0][1]["scale"]
 
                 if node.load(Label):
                     layer_type = "labels"
