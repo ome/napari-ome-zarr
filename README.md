@@ -32,7 +32,8 @@ Napari will use `ome-zarr` to open images that the plugin recognises as ome-zarr
 The image metadata from OMERO will be used to set channel names and rendering settings
 in napari::
 
-    $ napari 'https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/'
+    $ napari "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
+
 
     # Also works with local files
     $ napari 6001240.zarr
@@ -40,9 +41,11 @@ in napari::
 OR in python::
 
     import napari
-    with napari.gui_qt():
-        viewer = napari.Viewer()
-        viewer.open('https://s3.embassy.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/')
+    
+    viewer = napari.Viewer()
+    viewer.open('https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/')
+    
+    napari.run()
 
 If single zarray is passed to the plugin, it will be opened without the use of
 the metadata::
