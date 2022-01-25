@@ -127,6 +127,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         channel_axis = ch_types.index("channel")
                 except:
                     LOGGER.error("Error reading axes: Please update ome-zarr")
+                    raise
 
                 transform_scale(node.metadata, metadata, channel_axis, data[0].shape)
                 # If layer has no scale info, try apply scale from first layer
@@ -142,7 +143,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     if channel_axis is not None:
                         data = [np.squeeze(level, axis=channel_axis) for level in node.data]
                 else:
-                    LOGGER.debug("napari-ome-zarr: node.metadata: %s" % node.metadata)
+                    LOGGER.debug("node.metadata: %s" % node.metadata)
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
