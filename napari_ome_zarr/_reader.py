@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 import numpy as np
 from vispy.color import Colormap
 
-from ome_zarr.data import CHANNEL_DIMENSION
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
@@ -84,6 +83,30 @@ def transform_properties(props=None):
     return properties
 
 
+def transform_scale(node_metadata, metadata, channel_axis, shape):
+    """
+    e.g. transformation is {"axisIndices": [1, 2, 3], "scale": [0.2, 0.06, 0.06]}
+    Get a list of these for each level in data. Just use first?
+    """
+    if "transformations" in node_metadata:
+        level_0_transforms = node_metadata["transformations"][0]
+        for transf in level_0_transforms:
+            if "scale" in transf and "axisIndices" in transf:
+                axis_indices = transf["axisIndices"]
+                scale = transf["scale"]
+                scale_by_axis = {}
+                for axis, scale_val in zip(axis_indices, scale):
+                    scale_by_axis[axis] = scale_val
+                # for each dimension of the data (not including channels), we want
+                # scale value, or 1 if not found
+                scale_values = []
+                for dim in range(len(shape)):
+                    if dim != channel_axis:
+                        scale_values.append(scale_by_axis.get(dim, 1))
+                if len(scale_values) > 0:
+                    metadata["scale"] = tuple(scale_values)
+
+
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
@@ -95,27 +118,32 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
                 LOGGER.debug(f"transforming {node}")
-                shape = data[0].shape
 
                 layer_type: str = "image"
+                channel_axis = None
+                try:
+                    ch_types = [axis["type"] for axis in node.metadata["axes"]]
+                    if "channel" in ch_types:
+                        channel_axis = ch_types.index("channel")
+                except:
+                    LOGGER.error("Error reading axes: Please update ome-zarr")
+                    raise
+
+                transform_scale(node.metadata, metadata, channel_axis, data[0].shape)
+                # If layer has no scale info, try apply scale from first layer
+                if "scale" not in metadata and len(results) and "scale" in results[0][1]:
+                    # e.g. labels layer should be scaled to match the image
+                    metadata["scale"] = results[0][1]["scale"]
+
                 if node.load(Label):
                     layer_type = "labels"
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
-                    if "axes" in node.metadata and "c" in node.metadata["axes"]:
-                        c_index = node.metadata["axes"].index("c")
-                        data = [np.squeeze(level, axis=c_index) for level in node.data]
+                    if channel_axis is not None:
+                        data = [np.squeeze(level, axis=channel_axis) for level in node.data]
                 else:
-                    channel_axis = None
-                    if "axes" in node.metadata:
-                        # version 0.3 or greater. NB: is 'axes' optional?
-                        if "c" in node.metadata["axes"]:
-                            channel_axis = node.metadata["axes"].index("c")
-                    elif shape[CHANNEL_DIMENSION] > 1:
-                        # versions of ome-zarr-py before v0.3 support
-                        channel_axis = CHANNEL_DIMENSION
-
+                    LOGGER.debug("node.metadata: %s" % node.metadata)
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
