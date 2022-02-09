@@ -83,28 +83,24 @@ def transform_properties(props=None):
     return properties
 
 
-def transform_scale(node_metadata, metadata, channel_axis, shape):
+def transform_scale(node_metadata, metadata, channel_axis):
     """
-    e.g. transformation is {"axisIndices": [1, 2, 3], "scale": [0.2, 0.06, 0.06]}
+    e.g. transformation is {"scale": [0.2, 0.06, 0.06]}
     Get a list of these for each level in data. Just use first?
     """
-    if "transformations" in node_metadata:
-        level_0_transforms = node_metadata["transformations"][0]
+    if "coordinateTransformations" in node_metadata:
+        level_0_transforms = node_metadata["coordinateTransformations"][0]
         for transf in level_0_transforms:
-            if "scale" in transf and "axisIndices" in transf:
-                axis_indices = transf["axisIndices"]
+            if "scale" in transf:
                 scale = transf["scale"]
-                scale_by_axis = {}
-                for axis, scale_val in zip(axis_indices, scale):
-                    scale_by_axis[axis] = scale_val
-                # for each dimension of the data (not including channels), we want
-                # scale value, or 1 if not found
-                scale_values = []
-                for dim in range(len(shape)):
-                    if dim != channel_axis:
-                        scale_values.append(scale_by_axis.get(dim, 1))
-                if len(scale_values) > 0:
-                    metadata["scale"] = tuple(scale_values)
+                if channel_axis is not None:
+                    scale.pop(channel_axis)
+                metadata["scale"] = tuple(scale)
+            if "translation" in transf:
+                translate = transf["translation"]
+                if channel_axis is not None:
+                    translate.pop(channel_axis)
+                metadata["translate"] = tuple(translate)
 
 
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
@@ -118,6 +114,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
                 LOGGER.debug(f"transforming {node}")
+                LOGGER.debug("node.metadata: %s" % node.metadata)
 
                 layer_type: str = "image"
                 channel_axis = None
@@ -129,11 +126,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     LOGGER.error("Error reading axes: Please update ome-zarr")
                     raise
 
-                transform_scale(node.metadata, metadata, channel_axis, data[0].shape)
-                # If layer has no scale info, try apply scale from first layer
-                if "scale" not in metadata and len(results) and "scale" in results[0][1]:
-                    # e.g. labels layer should be scaled to match the image
-                    metadata["scale"] = results[0][1]["scale"]
+                transform_scale(node.metadata, metadata, channel_axis)
 
                 if node.load(Label):
                     layer_type = "labels"
@@ -143,7 +136,6 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     if channel_axis is not None:
                         data = [np.squeeze(level, axis=channel_axis) for level in node.data]
                 else:
-                    LOGGER.debug("node.metadata: %s" % node.metadata)
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
