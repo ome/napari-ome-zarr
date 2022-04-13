@@ -1,9 +1,9 @@
 # YAML 1.2
 # Metadata for citation of this software according to the CFF format (https://citation-file-format.github.io/)
-cff-version: 1.0.3
+cff-version: 1.2.0
 message: If you use this software, please cite it using these metadata.
 title: napari-ome-zarr
-doi: 10.5281/zenodo.5620852
+doi: 10.5281/zenodo.5620851
 authors:
 - given-names: Josh
   family-names: Moore
@@ -17,5 +17,49 @@ authors:
 - given-names: Draga
   family-names: Doncila Pop
 repository-code: https://github.com/ome/napari-ome-zarr
-version: 0.3.0
-date-released: 2021-10-29
+references:
+  - type: article
+    title: "OME-NGFF: a next-generation file format for expanding bioimaging data-access strategies "
+    journal: Nature Methods
+    volume: 18
+    number: 12
+    pages: 1496–1498
+    doi: 10.1038/s41592-021-01326-w
+    year: 2021
+    date-published: 2021-11-29
+    authors:
+      - family-names: Moore
+        given-names: Josh
+        orcid: "https://orcid.org/0000-0003-4028-811X"
+      - family-names: Allan
+        given-names: Chris
+      - family-names: Besson
+        given-names: Sébastien
+        orcid: "https://orcid.org/0000-0001-8783-1429"
+      - family-names: Burel
+        given-names: Jean-Marie
+      - family-names: Diel
+        given-names: Erin
+        orcid: "https://orcid.org/0000-0003-2526-3512"
+      - family-names: Gault
+        given-names: David
+      - family-names: Kozlowski
+        given-names: Kevin
+      - family-names: Lindner
+        given-names: Dominik
+      - family-names: Linkert
+        given-names: Melissa
+      - family-names: Manz
+        given-names: Trevor
+        orcid: "https://orcid.org/0000-0001-7694-5164"
+      - family-names: Moore
+        given-names: Will
+        orcid: "https://orcid.org/0000-0002-7264-8338"
+      - family-names: Pape
+        given-names: Constantin
+        orcid: "https://orcid.org/0000-0001-6562-7187"
+      - family-names: Tischer
+        given-names: Christian
+      - family-names: Swedlow
+        given-names: Jason
+        orcid: "https://orcid.org/0000-0002-2198-1958"
