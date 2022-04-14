@@ -15,15 +15,6 @@ from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 
-try:
-    from napari_plugin_engine import napari_hook_implementation
-except ImportError:
-
-    def napari_hook_implementation(
-        func: Callable, *args: Any, **kwargs: Any
-    ) -> Callable:
-        return func
-
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
@@ -31,7 +22,7 @@ LOGGER = logging.getLogger("napari_ome_zarr.reader")
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
                  "color", "metadata")
 
-@napari_hook_implementation
+
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     """Returns a reader for supported paths that include IDR ID.
 
