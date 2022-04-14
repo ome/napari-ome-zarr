@@ -2,8 +2,8 @@ import sys
 
 import numpy as np
 import pytest
-
 from ome_zarr.data import astronaut, create_zarr
+
 from napari_ome_zarr._reader import napari_get_reader
 
 
