@@ -12,7 +12,7 @@ repos:
       - id: isort
 
   - repo: https://github.com/psf/black
-    rev: 22.1.0
+    rev: 22.3.0
     hooks:
       - id: black
         args: [--target-version=py36]
@@ -60,12 +60,14 @@ repos:
           # Conflicts with black: E203 whitespace before ':'
           "--ignore=E203",
           "--rst-roles=class,func,ref,module,const",
+          "--exclude=docs/conf.py",
         ]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v0.931
     hooks:
       - id: mypy
+        exclude: tests/|setup.py|docs/conf.py
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v0.931
@@ -75,11 +77,9 @@ repos:
           --disallow-untyped-defs,
           --ignore-missing-imports,
         ]
-        exclude: tests/|setup.py
+        exclude: tests/|setup.py|docs/conf.py
 
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.26.3
     hooks:
       - id: yamllint
-        # args: [--config-data=relaxed]
-        #
