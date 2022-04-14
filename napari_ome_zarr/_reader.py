@@ -9,7 +9,7 @@ import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
-from ome_zarr.data import CHANNEL_DIMENSION
+
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
@@ -88,6 +88,26 @@ def transform_properties(
     return properties
 
 
+def transform_scale(node_metadata, metadata, channel_axis):
+    """
+    e.g. transformation is {"scale": [0.2, 0.06, 0.06]}
+    Get a list of these for each level in data. Just use first?
+    """
+    if "coordinateTransformations" in node_metadata:
+        level_0_transforms = node_metadata["coordinateTransformations"][0]
+        for transf in level_0_transforms:
+            if "scale" in transf:
+                scale = transf["scale"]
+                if channel_axis is not None:
+                    scale.pop(channel_axis)
+                metadata["scale"] = tuple(scale)
+            if "translation" in transf:
+                translate = transf["translation"]
+                if channel_axis is not None:
+                    translate.pop(channel_axis)
+                metadata["translate"] = tuple(translate)
+
+
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
@@ -99,27 +119,28 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 LOGGER.debug(f"skipping non-data {node}")
             else:
                 LOGGER.debug(f"transforming {node}")
-                shape = data[0].shape
+                LOGGER.debug("node.metadata: %s" % node.metadata)
 
                 layer_type: str = "image"
+                channel_axis = None
+                try:
+                    ch_types = [axis["type"] for axis in node.metadata["axes"]]
+                    if "channel" in ch_types:
+                        channel_axis = ch_types.index("channel")
+                except:
+                    LOGGER.error("Error reading axes: Please update ome-zarr")
+                    raise
+
+                transform_scale(node.metadata, metadata, channel_axis)
+
                 if node.load(Label):
                     layer_type = "labels"
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
-                    if "axes" in node.metadata and "c" in node.metadata["axes"]:
-                        c_index = node.metadata["axes"].index("c")
-                        data = [np.squeeze(level, axis=c_index) for level in node.data]
+                    if channel_axis is not None:
+                        data = [np.squeeze(level, axis=channel_axis) for level in node.data]
                 else:
-                    channel_axis = None
-                    if "axes" in node.metadata:
-                        # version 0.3 or greater. NB: is 'axes' optional?
-                        if "c" in node.metadata["axes"]:
-                            channel_axis = node.metadata["axes"].index("c")
-                    elif shape[CHANNEL_DIMENSION] > 1:
-                        # versions of ome-zarr-py before v0.3 support
-                        channel_axis = CHANNEL_DIMENSION
-
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
