@@ -9,7 +9,6 @@ import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
-
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
@@ -139,7 +138,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
                     if channel_axis is not None:
-                        data = [np.squeeze(level, axis=channel_axis) for level in node.data]
+                        data = [
+                            np.squeeze(level, axis=channel_axis) for level in node.data
+                        ]
                 else:
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
