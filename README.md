@@ -5,6 +5,8 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-ome-zarr.svg?color=green)](https://python.org)
 [![tests](https://github.com/ome/napari-ome-zarr/workflows/tests/badge.svg)](https://github.com/ome/napari-ome-zarr/actions)
 [![codecov](https://codecov.io/gh/ome/napari-ome-zarr/branch/master/graph/badge.svg)](https://codecov.io/gh/ome/napari-ome-zarr)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/ome/napari-ome-zarr/main.svg)](https://results.pre-commit.ci/latest/github/ome/napari-ome-zarr/main)
+
 
 A reader for zarr backed OME-NGFF images.
 
@@ -41,10 +43,10 @@ in napari::
 OR in python::
 
     import napari
-    
+
     viewer = napari.Viewer()
     viewer.open('https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/')
-    
+
     napari.run()
 
 If single zarray is passed to the plugin, it will be opened without the use of

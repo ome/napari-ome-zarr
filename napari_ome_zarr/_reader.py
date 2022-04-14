@@ -9,18 +9,17 @@ import warnings
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import numpy as np
-from vispy.color import Colormap
-
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
+from vispy.color import Colormap
 
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 # NB: color for labels, colormap for images
-METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap",
-                 "color", "metadata")
+METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "color", "metadata")
+
 
 
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -40,18 +39,23 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     return None
 
 
-def transform_properties(props=None):
+def transform_properties(
+    props: Optional[Dict[str, Dict]] = None
+) -> Optional[Dict[str, List]]:
     """
     Transform properties
 
     Transform a dict of {label_id : {key: value, key2: value2}}
     with a key for every LABEL
     into a dict of a key for every VALUE, with a list of values for each
-    {
-        "index": [1381342, 1381343...]
-        "omero:roiId": [1381342, 1381343...],
-        "omero:shapeId": [1682567, 1682567...]
-    }
+    .. code::
+
+        {
+            "index": [1381342, 1381343...]
+            "omero:roiId": [1381342, 1381343...],
+            "omero:shapeId": [1682567, 1682567...]
+        }
+
     """
     if props is None:
         return None
@@ -74,7 +78,9 @@ def transform_properties(props=None):
     return properties
 
 
-def transform_scale(node_metadata, metadata, channel_axis):
+def transform_scale(
+    node_metadata: Dict, metadata: Dict, channel_axis: Optional[int]
+) -> None:
     """
     e.g. transformation is {"scale": [0.2, 0.06, 0.06]}
     Get a list of these for each level in data. Just use first?
@@ -113,7 +119,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     ch_types = [axis["type"] for axis in node.metadata["axes"]]
                     if "channel" in ch_types:
                         channel_axis = ch_types.index("channel")
-                except:
+                except Exception:
                     LOGGER.error("Error reading axes: Please update ome-zarr")
                     raise
 
@@ -125,7 +131,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
                     if channel_axis is not None:
-                        data = [np.squeeze(level, axis=channel_axis) for level in node.data]
+                        data = [
+                            np.squeeze(level, axis=channel_axis) for level in node.data
+                        ]
                 else:
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
@@ -140,7 +148,8 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                             if x in node.metadata:
                                 metadata[x] = node.metadata[x]
                     else:
-                        # single channel image, so metadata just needs single items (not lists)
+                        # single channel image, so metadata just needs
+                        # single items (not lists)
                         for x in METADATA_KEYS:
                             if x in node.metadata:
                                 try:
