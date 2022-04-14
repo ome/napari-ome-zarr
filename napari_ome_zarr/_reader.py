@@ -14,12 +14,10 @@ from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
 
-
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 # NB: color for labels, colormap for images
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "color", "metadata")
-
 
 
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
