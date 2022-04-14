@@ -87,7 +87,9 @@ def transform_properties(
     return properties
 
 
-def transform_scale(node_metadata, metadata, channel_axis):
+def transform_scale(
+    node_metadata: Dict, metadata: Dict, channel_axis: Optional[int]
+) -> None:
     """
     e.g. transformation is {"scale": [0.2, 0.06, 0.06]}
     Get a list of these for each level in data. Just use first?
@@ -126,7 +128,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     ch_types = [axis["type"] for axis in node.metadata["axes"]]
                     if "channel" in ch_types:
                         channel_axis = ch_types.index("channel")
-                except:
+                except Exception:
                     LOGGER.error("Error reading axes: Please update ome-zarr")
                     raise
 
