@@ -133,6 +133,15 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                             np.squeeze(level, axis=channel_axis) for level in node.data
                         ]
                 else:
+
+                    metadata["name"] = "unnamed"
+                    image = node.metadata.get("ome-xml:image", None)
+                    # Pull from OME-XML metadata
+                    if image:
+                        metadata["name"] = image.name
+
+                    # Pull from NGFF metadata?
+                    # TBD
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
