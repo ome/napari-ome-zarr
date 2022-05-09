@@ -6,7 +6,7 @@ It implements the ``napari_get_reader`` hook specification, (to create a reader 
 
 import logging
 import warnings
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 from ome_zarr.io import parse_url
@@ -14,23 +14,12 @@ from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
 
-try:
-    from napari_plugin_engine import napari_hook_implementation
-except ImportError:
-
-    def napari_hook_implementation(
-        func: Callable, *args: Any, **kwargs: Any
-    ) -> Callable:
-        return func
-
-
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 # NB: color for labels, colormap for images
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "color", "metadata")
 
 
-@napari_hook_implementation
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     """Returns a reader for supported paths that include IDR ID.
 

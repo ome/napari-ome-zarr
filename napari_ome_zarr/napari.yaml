@@ -1,0 +1,13 @@
+---
+name: napari-ome-zarr
+schema_version: 0.1.0
+contributions:
+  commands:
+    - id: napari-ome-zarr.get_reader
+      title: Get Reader
+      python_name: napari_ome_zarr._reader:napari_get_reader
+  readers:
+    - command: napari-ome-zarr.get_reader
+      filename_patterns:
+        - "*.zarr"
+      accepts_directories: true
