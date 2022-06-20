@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 from ome_zarr.io import parse_url
-from ome_zarr.reader import Label, Node, Reader
+from ome_zarr.reader import Label, Node, Reader, PlateLabels
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
 
@@ -123,7 +123,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
 
                 transform_scale(node.metadata, metadata, channel_axis)
 
-                if node.load(Label):
+                if node.load(Label) or node.load(PlateLabels):
                     layer_type = "labels"
                     for x in METADATA_KEYS:
                         if x in node.metadata:
