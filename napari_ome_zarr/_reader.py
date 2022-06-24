@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 from ome_zarr.io import parse_url
-from ome_zarr.reader import Label, Node, Reader, PlateLabels
+from ome_zarr.reader import Label, Node, PlateLabels, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
 
