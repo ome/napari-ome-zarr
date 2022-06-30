@@ -10,5 +10,5 @@ contributions:
     - command: napari-ome-zarr.get_reader
       filename_patterns:
         - "*.zarr"
-        - "*.zarr/"
+        - "*.zarr*"
       accepts_directories: true
