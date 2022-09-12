@@ -106,10 +106,10 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
             data: List[Any] = node.data
             metadata: Dict[str, Any] = {}
             if data is None or len(data) < 1:
-                LOGGER.debug(f"skipping non-data {node}")
+                LOGGER.debug("skipping non-data %s", node)
             else:
-                LOGGER.debug(f"transforming {node}")
-                LOGGER.debug("node.metadata: %s" % node.metadata)
+                LOGGER.debug("transforming %s", node)
+                LOGGER.debug("node.metadata: %s", node.metadata)
 
                 layer_type: str = "image"
                 channel_axis = None
@@ -160,7 +160,7 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     metadata["properties"] = properties
 
                 rv: LayerData = (data, metadata, layer_type)
-                LOGGER.debug(f"Transformed: {rv}")
+                LOGGER.debug("Transformed: %s", rv)
                 results.append(rv)
 
         return results
