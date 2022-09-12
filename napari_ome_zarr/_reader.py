@@ -32,7 +32,8 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     zarr = parse_url(path)
     if zarr:
         reader = Reader(zarr)
-        return transform(reader())
+        rv = transform(reader())
+        return rv
     # Ignoring this path
     return None
 
@@ -131,6 +132,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     if channel_axis is not None:
                         data = [
                             np.squeeze(level, axis=channel_axis) for level in node.data
+                        ]
+                        metadata["name"] = [
+                            metadata.get("name", "unnamed") for x in range(3)
                         ]
                 else:
 
