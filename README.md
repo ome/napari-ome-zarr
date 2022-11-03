@@ -43,7 +43,7 @@ If a dialog in napari pops up, encouraging you to choose a reader, choose ``napa
 
 To open a local file::
 
-    napari 13457227.zarr
+    napari --plugin napari-ome-zarr 13457227.zarr
 
 OR in python::
 
