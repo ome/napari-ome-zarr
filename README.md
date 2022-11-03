@@ -39,7 +39,7 @@ in napari::
     napari "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
 
 
-If a dialog in napari pops up, encouraging you to choose a reader, choose ``napari-ome-zarr`` and click OK.
+If a dialog in napari pops up, encouraging you to choose a reader, choose ``napari-ome-zarr`` and click OK. You can stop it happening with addition of ``--plugin napari-ome-zarr`` as in the example below.
 
 To open a local file::
 
