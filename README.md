@@ -24,35 +24,36 @@ https://napari.org/docs/plugins/index.html
 
 ## Installation
 
-You can install `napari-ome-zarr` via [pip]:
+[Install napari] if not already installed.
+
+You can install `napari-ome-zarr` via [pip]. Activate the same environment as you installed napari into, then:
 
     pip install napari-ome-zarr
 
 ## Usage
 
-Napari will use `ome-zarr` to open images that the plugin recognises as ome-zarr.
+Napari will use `napari-ome-zarr` plugin to open images that the plugin recognises as ome-zarr.
 The image metadata from OMERO will be used to set channel names and rendering settings
 in napari::
 
-    $ napari "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
+    napari "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
 
 
-    # Also works with local files
-    $ napari 6001240.zarr
+If a dialog in napari pops up, encouraging you to choose a reader, choose ``napari-ome-zarr`` and click OK.
+
+To open a local file::
+
+    napari 13457227.zarr
 
 OR in python::
 
     import napari
 
     viewer = napari.Viewer()
-    viewer.open('https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/')
+    viewer.open("https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457537.zarr", plugin="napari-ome-zarr")
 
     napari.run()
 
-If single zarray is passed to the plugin, it will be opened without the use of
-the metadata::
-
-    $ napari '/tmp/6001240.zarr/0'
 
 ## Contributing
 
@@ -68,6 +69,7 @@ Distributed under the terms of the [BSD-3] license,
 
 If you encounter any problems, please [file an issue] along with a detailed description.
 
+[Install napari]: https://napari.org/stable/tutorials/fundamentals/installation.html
 [napari]: https://github.com/napari/napari
 [Cookiecutter]: https://github.com/audreyr/cookiecutter
 [@napari]: https://github.com/napari
