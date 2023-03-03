@@ -13,6 +13,7 @@ from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
+from .table_utils import anndata_to_napari_tracks, anndata_to_napari_points
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
@@ -162,6 +163,16 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 rv: LayerData = (data, metadata, layer_type)
                 LOGGER.debug("Transformed: %s", rv)
                 results.append(rv)
+
+            if hasattr(node, "tables"):
+                LOGGER.debug("Handle tables...")
+                for table_name, anndata_obj in node.tables.items():
+                    LOGGER.debug("Handle anndata table: %s", table_name)
+                    # points layer
+                    results.append(anndata_to_napari_points(anndata_obj))
+
+                    # tracks layer
+                    results.append(anndata_to_napari_tracks(anndata_obj))
 
         return results
 
