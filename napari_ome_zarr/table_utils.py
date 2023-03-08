@@ -2,29 +2,33 @@
 import numpy as np
 
 
-def child_count(tracks_matrix, parent_index):
+def get_child_count(row):
     # count the children for a given point
-    ones = [val for val in tracks_matrix[parent_index] if val == 1]
+    ones = [val for val in row if val == 1]
     return len(ones)
 
 
-def track_obj(tracks_matrix, parent_index, points_coords, tracks, tid):
-    # if parent has a single child...
-    if child_count(tracks_matrix, parent_index) == 1:
-        # add row to tracks
-        tracks = np.append(tracks, np.insert(points_coords[parent_index], 0, tid))
-        for child_index in range(len(tracks_matrix[parent_index])):
-            # find the ONE child...
-            if tracks_matrix[parent_index][child_index] == 1:
-                # unset the flag, so we ignore it on next pass
-                tracks_matrix[parent_index][child_index] = 2
-                # recursive - the child_index becomes the parent_index
-                tracks = track_obj(tracks_matrix, child_index, points_coords, tracks, tid)
-        return tracks
-    else:
-        # If we have multiple children (or none), we stop
-        # new tracks will have new IDs
-        return tracks
+def get_child_index(row):
+    # get the first index of a 1 in the row
+    return(row.tolist().index(1))
+
+
+def track_obj(tracks_matrix, parent_index, points_coords, tracks, track_id):
+    row = tracks_matrix[parent_index]
+    child_count = get_child_count(row)
+    for child_index in range(len(row)):
+        if row[child_index] == 1:
+            # unset the flag, so we ignore it on next pass
+            row[child_index] = 2
+            # if we have branching, each new track gets a new ID
+            if child_count > 1:
+                track_id += 1
+            # add row to tracks
+            tracks = np.append(tracks, np.insert(points_coords[parent_index], 0, track_id))
+            # recursive - the child_index becomes the parent_index
+            tracks, track_id = track_obj(tracks_matrix, child_index, points_coords, tracks, track_id)
+
+    return tracks, track_id
 
               
 def anndata_to_napari_tracks(anndata_obj):
@@ -47,16 +51,13 @@ def anndata_to_napari_tracks(anndata_obj):
         # for row_index in range(2):
         for col_index in range(len(tracks_matrix[row_index])):
             if tracks_matrix[row_index][col_index] == 1:
-                print("START track ", track_id, 'row', row_index, 'col', col_index)
                 # for each "1" in sparse matrix row, we add to tracks
-                print('coords', points_coords[row_index])
                 # insert the track_id at the start of point coords, and add to tracks
                 tracks = np.append(tracks, np.insert(points_coords[row_index], 0, track_id))
                 # recursively track this object...
-                tracks = track_obj(tracks_matrix, col_index, points_coords, tracks, track_id)
+                tracks, track_id = track_obj(tracks_matrix, col_index, points_coords, tracks, track_id)
                 # increment the track id...
                 track_id += 1
-                print("UPDATE - tracks.shape", tracks.shape)
 
     tracks = tracks.reshape([tracks.size // 6, 6])
 
