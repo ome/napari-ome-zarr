@@ -7,59 +7,47 @@ def get_child_count(row):
     ones = [val for val in row if val == 1]
     return len(ones)
 
-
-def get_child_index(row):
-    # get the first index of a 1 in the row
-    return(row.tolist().index(1))
-
-
-def track_obj(tracks_matrix, parent_index, points_coords, tracks, track_id):
-    row = tracks_matrix[parent_index]
-    child_count = get_child_count(row)
-    for child_index in range(len(row)):
-        if row[child_index] == 1:
-            # unset the flag, so we ignore it on next pass
-            row[child_index] = 2
-            # if we have branching, each new track gets a new ID
-            if child_count > 1:
-                track_id += 1
-            # add row to tracks
-            tracks = np.append(tracks, np.insert(points_coords[parent_index], 0, track_id))
-            # recursive - the child_index becomes the parent_index
-            tracks, track_id = track_obj(tracks_matrix, child_index, points_coords, tracks, track_id)
-
-    return tracks, track_id
-
               
 def anndata_to_napari_tracks(anndata_obj):
     points_coords = anndata_obj.X
-
-    # we add an 'index' column, so that after these points have been
-    # reordered into tracks, we can still lookup the obs rows for each point
-    row_count = points_coords.shape[0]
-    row_ids = np.arange(row_count).reshape([row_count, 1])
-    points_coords = np.concatenate((points_coords, row_ids), axis=1)
-
     # convert sparse obsp to dense array
     tracks_matrix = anndata_obj.obsp["tracking"].toarray()
 
-    # columns: track_id, t, z, y, x, row_index (point_id)
-    tracks = np.empty((0, 6))
-    track_id = 0
-    
-    for row_index in range(len(tracks_matrix)):
-        # for row_index in range(2):
-        for col_index in range(len(tracks_matrix[row_index])):
-            if tracks_matrix[row_index][col_index] == 1:
-                # for each "1" in sparse matrix row, we add to tracks
-                # insert the track_id at the start of point coords, and add to tracks
-                tracks = np.append(tracks, np.insert(points_coords[row_index], 0, track_id))
-                # recursively track this object...
-                tracks, track_id = track_obj(tracks_matrix, col_index, points_coords, tracks, track_id)
-                # increment the track id...
-                track_id += 1
+    # graph (dict {int: list}) – Graph representing associations between tracks. Dictionary defines the mapping between a track ID and the parents of the track. This can be one (the track has one parent, and the parent has >=1 child) in the case of track splitting, or more than one (the track has multiple parents, but only one child) in the case of track merging. See examples/tracks_3d_with_graph.py
+    graph = {}
 
-    tracks = tracks.reshape([tracks.size // 6, 6])
+    # we add an 'track_ids' column
+    row_count = points_coords.shape[0]
+    track_ids = np.zeros([row_count, 1])
+
+    track_id = 0
+    # track_ids[0] = track_id
+    for row_index in range(len(tracks_matrix)):
+        if track_ids[row_index] == 0:
+            track_ids[row_index] = track_id
+        row = tracks_matrix[row_index]
+        child_count = get_child_count(row)
+        print('row_index', row_index, 'child_count', child_count, 'track_id', track_id)
+        # end of track - increment for next...
+        if child_count == 0:
+            track_id += 1
+        for child_index in range(len(row)):
+            if row[child_index] == 1:
+                if child_count == 1:
+                    # orphan child will have the same track_id as parent
+                    if track_ids[child_index] == 0:
+                        track_ids[child_index] = track_ids[row_index]
+                    else:
+                        # If the child was already a child, this is a new merged track
+                        track_id += 1
+                        track_ids[child_index] = track_id
+                else:
+                    # multiple child tracks, each with new track_id
+                    track_id += 1
+                    track_ids[child_index] = track_id
+
+    tracks = np.concatenate((track_ids, points_coords), axis=1)
+
 
     # read other properties from obs...
     obs = anndata_obj.obs
@@ -69,22 +57,13 @@ def anndata_to_napari_tracks(anndata_obj):
     # (dict {str: array (N,)}, DataFrame)
     properties = {}
     for colname in obs.columns:
-        properties[colname] = []
+        properties[colname] = obs[colname].values.tolist()
 
     # The 'arboretum' napari plugin requires each 'properties' to have a 't'
     # https://github.com/quantumjot/BayesianTracker/issues/210
-    properties["t"] = []
+    properties["t"] = points_coords[:,1]
 
-    # for each row of the tracks data, we get the row_index to add additional data from obs
-    for track_row in tracks:
-        row_index = int(track_row[5])
-        obs_row = obs_dict[row_index]
-        properties["t"].append(points_coords[row_index][1])
-        for colname in obs.columns:
-            properties[colname].append(obs_row[colname])
-
-    # remove the row-index (last column)
-    tracks = tracks[:,:5]
+    print("tracks", tracks)
 
     return tracks, {"properties": properties}, 'tracks'
 
