@@ -50,11 +50,11 @@ def anndata_to_napari_tracks(anndata_obj):
     track_ids.resize([row_count, 1])
     tracks = np.concatenate((track_ids, points_coords), axis=1)
 
-    # graph (dict {int: list}) – Graph representing associations between tracks.
-    # Dictionary defines the mapping between a track ID and the parents of the track.
+    # graph (dict {int: list}) Graph representing associations between tracks.
+    # Dictionary defines mapping between a track ID and parents of the track.
     # This can be one (the track has one parent, and the parent has >=1 child)
-    # in the case of track splitting, or more than one (the track has multiple parents,
-    # but only one child) in the case of track merging.
+    # in the case of track splitting, or more than one (the track has multiple
+    # parents, but only one child) in the case of track merging.
     graph = defaultdict(list)
     # build a graph of parent links
     for point in point_links:
@@ -66,7 +66,8 @@ def anndata_to_napari_tracks(anndata_obj):
     # read other properties from obs...
     obs = anndata_obj.obs
 
-    # Properties for each point. Each property should be an array of length N, where N is the number of points.
+    # Properties for each point. Each property should be an array of length N,
+    # where N is the number of points.
     # (dict {str: array (N,)}, DataFrame)
     properties = {}
     for colname in obs.columns:
