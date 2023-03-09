@@ -1,57 +1,70 @@
 
 import numpy as np
+from collections import defaultdict
 
 
-def get_child_count(row):
-    # count the children for a given point
-    ones = [val for val in row if val == 1]
-    return len(ones)
+def set_id(point_index, track_id, points):
+    """ Recursively set the ID of all points in the same track. """
+    point = points[point_index]
+    point["id"] = track_id
+    # if we have 1 child and it only has 1 parent, it is part of this track
+    if len(point["children"]) == 1:
+        child = points[point["children"][0]]
+        if len(child["parents"]) == 1:
+            set_id(point["children"][0], track_id, points)
 
-              
+
 def anndata_to_napari_tracks(anndata_obj):
     points_coords = anndata_obj.X
     # convert sparse obsp to dense array
     tracks_matrix = anndata_obj.obsp["tracking"].toarray()
 
-    # graph (dict {int: list}) – Graph representing associations between tracks. Dictionary defines the mapping between a track ID and the parents of the track. This can be one (the track has one parent, and the parent has >=1 child) in the case of track splitting, or more than one (the track has multiple parents, but only one child) in the case of track merging. See examples/tracks_3d_with_graph.py
-    graph = {}
-
     # we add an 'track_ids' column
     row_count = points_coords.shape[0]
-    track_ids = np.zeros([row_count, 1])
 
+    # for each point, we want to track links to parent/child points
+    point_links = []
+    for r in range(row_count):
+        point_links.append({"parents": [], "children": [], "id": -1})
+
+    # populate all links from the matrix
+    for row_index, row in enumerate(tracks_matrix):
+        for child_index, value in enumerate(row):
+            if value == 1:
+                # create a link in both directions...
+                point_links[row_index]["children"].append(child_index)
+                point_links[child_index]["parents"].append(row_index)
+
+    # Now we can assign track IDs...
     track_id = 0
-    # track_ids[0] = track_id
-    for row_index in range(len(tracks_matrix)):
-        if track_ids[row_index] == 0:
-            track_ids[row_index] = track_id
-        row = tracks_matrix[row_index]
-        child_count = get_child_count(row)
-        print('row_index', row_index, 'child_count', child_count, 'track_id', track_id)
-        # end of track - increment for next...
-        if child_count == 0:
+    for point_index, point in enumerate(point_links):
+        # if the ID hasn't been set yet, it's a new track...
+        if point["id"] == -1:
+            # recursively set ids for all points
+            set_id(point_index, track_id, point_links)
             track_id += 1
-        for child_index in range(len(row)):
-            if row[child_index] == 1:
-                if child_count == 1:
-                    # orphan child will have the same track_id as parent
-                    if track_ids[child_index] == 0:
-                        track_ids[child_index] = track_ids[row_index]
-                    else:
-                        # If the child was already a child, this is a new merged track
-                        track_id += 1
-                        track_ids[child_index] = track_id
-                else:
-                    # multiple child tracks, each with new track_id
-                    track_id += 1
-                    track_ids[child_index] = track_id
 
+    # add track IDs as extra column to points, to create 'tracks'
+    track_ids = [point["id"] for point in point_links]
+    track_ids = np.asarray(track_ids)
+    track_ids.resize([row_count, 1])
     tracks = np.concatenate((track_ids, points_coords), axis=1)
 
+    # graph (dict {int: list}) – Graph representing associations between tracks.
+    # Dictionary defines the mapping between a track ID and the parents of the track.
+    # This can be one (the track has one parent, and the parent has >=1 child)
+    # in the case of track splitting, or more than one (the track has multiple parents,
+    # but only one child) in the case of track merging.
+    graph = defaultdict(list)
+    # build a graph of parent links
+    for point in point_links:
+        for pid in point["parents"]:
+            parent = point_links[pid]
+            if parent["id"] != point["id"]:
+                graph[point["id"]].append(parent["id"])
 
     # read other properties from obs...
     obs = anndata_obj.obs
-    obs_dict = obs.to_dict(orient='records')
 
     # Properties for each point. Each property should be an array of length N, where N is the number of points.
     # (dict {str: array (N,)}, DataFrame)
@@ -64,8 +77,9 @@ def anndata_to_napari_tracks(anndata_obj):
     properties["t"] = points_coords[:,1]
 
     print("tracks", tracks)
+    print("graph", graph)
 
-    return tracks, {"properties": properties}, 'tracks'
+    return tracks, {"properties": properties, "graph": graph}, 'tracks'
 
 
 def anndata_to_napari_points(anndata_obj):
