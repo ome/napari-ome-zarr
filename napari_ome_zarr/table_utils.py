@@ -1,9 +1,9 @@
 from collections import defaultdict
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, List
 
+import numpy as np
 from anndata import AnnData
 from ome_zarr.types import LayerData
-import numpy as np
 
 
 def set_id(point_index: int, track_id: int, points: List[Dict]) -> None:
@@ -26,7 +26,7 @@ def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
     row_count = points_coords.shape[0]
 
     # for each point, we want to track links to parent/child points
-    point_links = []
+    point_links: List[Dict[str, Any]] = []
     for r in range(row_count):
         point_links.append({"parents": [], "children": [], "id": -1})
 
@@ -48,8 +48,7 @@ def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
             track_id += 1
 
     # add track IDs as extra column to points, to create 'tracks'
-    track_ids = [point["id"] for point in point_links]
-    track_ids = np.asarray(track_ids)
+    track_ids = np.asarray([point["id"] for point in point_links])
     track_ids.resize([row_count, 1])
     tracks = np.concatenate((track_ids, points_coords), axis=1)
 
