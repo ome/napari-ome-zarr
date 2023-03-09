@@ -13,7 +13,8 @@ from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
-from .table_utils import anndata_to_napari_tracks, anndata_to_napari_points
+
+from .table_utils import anndata_to_napari_points, anndata_to_napari_tracks
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 

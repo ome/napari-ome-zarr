@@ -1,10 +1,10 @@
+from collections import defaultdict
 
 import numpy as np
-from collections import defaultdict
 
 
 def set_id(point_index, track_id, points):
-    """ Recursively set the ID of all points in the same track. """
+    """Recursively set the ID of all points in the same track."""
     point = points[point_index]
     point["id"] = track_id
     # if we have 1 child and it only has 1 parent, it is part of this track
@@ -74,12 +74,12 @@ def anndata_to_napari_tracks(anndata_obj):
 
     # The 'arboretum' napari plugin requires each 'properties' to have a 't'
     # https://github.com/quantumjot/BayesianTracker/issues/210
-    properties["t"] = points_coords[:,1]
+    properties["t"] = points_coords[:, 1]
 
     print("tracks", tracks)
     print("graph", graph)
 
-    return tracks, {"properties": properties, "graph": graph}, 'tracks'
+    return tracks, {"properties": properties, "graph": graph}, "tracks"
 
 
 def anndata_to_napari_points(anndata_obj):
