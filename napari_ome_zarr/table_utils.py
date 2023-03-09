@@ -1,9 +1,12 @@
 from collections import defaultdict
+from typing import Any, Dict, Iterator, List, Optional
 
+from anndata import AnnData
+from ome_zarr.types import LayerData
 import numpy as np
 
 
-def set_id(point_index, track_id, points):
+def set_id(point_index: int, track_id: int, points: List[Dict]) -> None:
     """Recursively set the ID of all points in the same track."""
     point = points[point_index]
     point["id"] = track_id
@@ -14,7 +17,7 @@ def set_id(point_index, track_id, points):
             set_id(point["children"][0], track_id, points)
 
 
-def anndata_to_napari_tracks(anndata_obj):
+def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
     points_coords = anndata_obj.X
     # convert sparse obsp to dense array
     tracks_matrix = anndata_obj.obsp["tracking"].toarray()
@@ -83,7 +86,7 @@ def anndata_to_napari_tracks(anndata_obj):
     return tracks, {"properties": properties, "graph": graph}, "tracks"
 
 
-def anndata_to_napari_points(anndata_obj):
+def anndata_to_napari_points(anndata_obj: AnnData) -> LayerData:
     new_layer_data = (
         anndata_obj.X,
         {"edge_width": 0.0, "size": 1, "properties": anndata_obj.obs},
