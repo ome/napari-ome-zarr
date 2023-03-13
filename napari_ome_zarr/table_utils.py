@@ -82,7 +82,11 @@ def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
     print("tracks", tracks)
     print("graph", graph)
 
-    return tracks, {"properties": properties, "graph": graph}, "tracks"
+    return (
+        tracks,
+        {"properties": properties, "graph": graph, "blending": "translucent"},
+        "tracks",
+    )
 
 
 def anndata_to_napari_points(anndata_obj: AnnData) -> LayerData:
