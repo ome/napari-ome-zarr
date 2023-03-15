@@ -165,15 +165,15 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                 LOGGER.debug("Transformed: %s", rv)
                 results.append(rv)
 
-            if hasattr(node, "tables"):
-                LOGGER.debug("Handle tables...")
-                for table_name, anndata_obj in node.tables.items():
-                    LOGGER.debug("Handle anndata table: %s", table_name)
-                    # points layer
-                    results.append(anndata_to_napari_points(anndata_obj))
+            if hasattr(node, "table") and node.table is not None:
+                LOGGER.debug("Handle table...%s", node)
+                if node.metadata.get("type") == "ngff:points_table":
+                    # LOGGER.debug("Handle anndata table: %s", table_name)
+                    # points layer(s)
+                    results.extend(anndata_to_napari_points(node.table))
 
-                    # tracks layer
-                    results.append(anndata_to_napari_tracks(anndata_obj))
+                    # tracks layer(s)
+                    results.extend(anndata_to_napari_tracks(node.table))
 
         return results
 

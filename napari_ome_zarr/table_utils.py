@@ -17,9 +17,14 @@ def set_id(point_index: int, track_id: int, points: List[Dict]) -> None:
             set_id(point["children"][0], track_id, points)
 
 
-def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
+def anndata_to_napari_tracks(anndata_obj: AnnData) -> List[LayerData]:
+    # X table has t, (z), y, x data.
+    # TODO: validate columns are as expected, given image dims (Z stack?)
     points_coords = anndata_obj.X
     # convert sparse obsp to dense array
+    # We are looking for "tracking" dict in obsp
+    if "tracking" not in anndata_obj.obsp:
+        return []
     tracks_matrix = anndata_obj.obsp["tracking"].toarray()
 
     # we add an 'track_ids' column
@@ -82,17 +87,25 @@ def anndata_to_napari_tracks(anndata_obj: AnnData) -> LayerData:
     print("tracks", tracks)
     print("graph", graph)
 
-    return (
-        tracks,
-        {"properties": properties, "graph": graph, "blending": "translucent"},
-        "tracks",
-    )
+    return [
+        (
+            tracks,
+            {"properties": properties, "graph": graph, "blending": "translucent"},
+            "tracks",
+        )
+    ]
 
 
-def anndata_to_napari_points(anndata_obj: AnnData) -> LayerData:
+def anndata_to_napari_points(anndata_obj: AnnData) -> List[LayerData]:
+    # X table has t, (z), y, x data.
+    # TODO: validate columns are as expected, given image dims (Z stack?)
+    x_data = anndata_obj.X
+    col_count = x_data.shape[-1]
+    if col_count < 3:
+        return []
     new_layer_data = (
-        anndata_obj.X,
+        x_data,
         {"edge_width": 0.0, "size": 1, "properties": anndata_obj.obs},
         "points",
     )
-    return new_layer_data
+    return [new_layer_data]
