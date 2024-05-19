@@ -11,13 +11,20 @@ from napari_ome_zarr._reader import napari_get_reader
 class TestNapari:
     @pytest.fixture(autouse=True)
     def initdir(self, tmp_path: Path):
+        """
+        Write some temporary test data.
+
+        create_zarr() creates an image pyramid and labels zarr directories.
+        """
         self.path_3d = tmp_path / "data_3d"
         self.path_3d.mkdir()
-        create_zarr(self.path_3d, astronaut, "astronaut")
+        create_zarr(self.path_3d, method=astronaut, label_name="astronaut")
 
         self.path_2d = tmp_path / "data_2d"
         self.path_2d.mkdir()
         create_zarr(self.path_2d)
+
+        self.n_layers = 2
 
     def test_get_reader_hit(self):
         reader = napari_get_reader(self.path_3d)
@@ -29,7 +36,7 @@ class TestNapari:
         path_str = str(getattr(self, path))
         reader = napari_get_reader(path_str)
         results = reader(path_str)
-        assert len(results) == 2
+        assert len(results) == self.n_layers
         image, label = results
         assert isinstance(image[0], list)
         assert isinstance(image[1], dict)
@@ -54,7 +61,7 @@ class TestNapari:
     def assert_layers(self, layers, visible_1, visible_2, path="path_3d"):
         # TODO: check name
 
-        assert len(layers) == 2
+        assert len(layers) == self.n_datasets
         image, label = layers
 
         data, metadata, layer_type = self.assert_layer(image)
