@@ -61,7 +61,7 @@ class TestNapari:
     def assert_layers(self, layers, visible_1, visible_2, path="path_3d"):
         # TODO: check name
 
-        assert len(layers) == self.n_datasets
+        assert len(layers) == self.n_layers
         image, label = layers
 
         data, metadata, layer_type = self.assert_layer(image)
