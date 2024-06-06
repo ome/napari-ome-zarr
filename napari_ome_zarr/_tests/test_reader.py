@@ -18,14 +18,14 @@ class TestNapari:
         """
         self.path_3d = tmp_path / "data_3d"
         self.path_3d.mkdir()
-        create_zarr(self.path_3d, method=astronaut, label_name="astronaut")
+        create_zarr(str(self.path_3d), method=astronaut, label_name="astronaut")
 
         self.path_2d = tmp_path / "data_2d"
         self.path_2d.mkdir()
-        create_zarr(self.path_2d)
+        create_zarr(str(self.path_2d))
 
     def test_get_reader_hit(self):
-        reader = napari_get_reader(self.path_3d)
+        reader = napari_get_reader(str(self.path_3d))
         assert reader is not None
         assert callable(reader)
 
@@ -90,12 +90,12 @@ class TestNapari:
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
-        filename = self.path_3d / "labels"
+        filename = str(self.path_3d / "labels")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
     def test_label(self):
-        filename = self.path_3d / "labels" / "astronaut"
+        filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
