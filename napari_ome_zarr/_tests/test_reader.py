@@ -24,8 +24,6 @@ class TestNapari:
         self.path_2d.mkdir()
         create_zarr(self.path_2d)
 
-        self.n_layers = 2
-
     def test_get_reader_hit(self):
         reader = napari_get_reader(self.path_3d)
         assert reader is not None
@@ -36,7 +34,7 @@ class TestNapari:
         path_str = str(getattr(self, path))
         reader = napari_get_reader(path_str)
         results = reader(path_str)
-        assert len(results) == self.n_layers
+        assert len(results) == 2
         image, label = results
         assert isinstance(image[0], list)
         assert isinstance(image[1], dict)
@@ -61,7 +59,7 @@ class TestNapari:
     def assert_layers(self, layers, visible_1, visible_2, path="path_3d"):
         # TODO: check name
 
-        assert len(layers) == self.n_layers
+        assert len(layers) == 2
         image, label = layers
 
         data, metadata, layer_type = self.assert_layer(image)
