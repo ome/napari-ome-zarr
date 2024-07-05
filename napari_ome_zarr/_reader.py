@@ -17,7 +17,7 @@ from vispy.color import Colormap
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
 # NB: color for labels, colormap for images
-METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "color", "metadata")
+METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "metadata")
 
 
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -128,6 +128,8 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
+                        elif x == "colormap" and node.metadata["color"]:
+                              metadata[x] = node.metadata["color"]
                     if channel_axis is not None:
                         data = [
                             np.squeeze(level, axis=channel_axis) for level in node.data
