@@ -6,6 +6,7 @@ It implements the ``napari_get_reader`` hook specification, (to create a reader 
 
 import logging
 import warnings
+from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
@@ -16,8 +17,10 @@ from vispy.color import Colormap
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
-# NB: color for labels, colormap for images
 METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "metadata")
+
+# major and minor versions as int
+napari_version = tuple(map(int, list(version("napari").split(".")[:2])))
 
 
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -129,7 +132,11 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
                         elif x == "colormap" and node.metadata["color"]:
-                              metadata[x] = node.metadata["color"]
+                            # key changed 'color' -> 'colormap' in napari 0.5
+                            if napari_version >= (0, 5):
+                                metadata["colormap"] = node.metadata["color"]
+                            else:
+                                metadata["color"] = node.metadata["color"]
                     if channel_axis is not None:
                         data = [
                             np.squeeze(level, axis=channel_axis) for level in node.data
