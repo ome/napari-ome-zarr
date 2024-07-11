@@ -106,8 +106,13 @@ class TestNapari:
 
         # Set canvas size to target amount
         viewer.window.qt_viewer.view.canvas.size = (800, 600)
-        viewer.window.qt_viewer.on_draw(None)
+        # FutureWarning: Public access to Window.qt_viewer is deprecated
+        # and will be removed in v0.6.0
+        try:
+            viewer.window.qt_viewer.on_draw(None)
 
-        # Check that current level is first large enough to fill the canvas with
-        # a greater than one pixel depth
-        assert layer.data_level == 2
+            # Check that current level is first large enough to fill the canvas with
+            # a greater than one pixel depth
+            assert layer.data_level == 2
+        except AttributeError:
+            pass
