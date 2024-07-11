@@ -154,6 +154,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         for x in METADATA_KEYS:
                             if x in node.metadata:
                                 metadata[x] = node.metadata[x]
+                        # overwrite 'name' if we have 'channel_names'
+                        if "channel_names" in node.metadata:
+                            metadata["name"] = node.metadata["channel_names"]
                     else:
                         # single channel image, so metadata just needs
                         # single items (not lists)
@@ -163,6 +166,10 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                                     metadata[x] = node.metadata[x][0]
                                 except Exception:
                                     pass
+                        # overwrite 'name' if we have 'channel_names'
+                        if "channel_names" in node.metadata:
+                            if len(node.metadata["channel_names"]) > 0:
+                                metadata["name"] = node.metadata["channel_names"][0]
 
                 properties = transform_properties(node.metadata.get("properties"))
                 if properties is not None:
