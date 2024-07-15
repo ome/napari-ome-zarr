@@ -6,6 +6,7 @@ It implements the ``napari_get_reader`` hook specification, (to create a reader 
 
 import logging
 import warnings
+from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
@@ -16,8 +17,10 @@ from vispy.color import Colormap
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
-# NB: color for labels, colormap for images
-METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "color", "metadata")
+METADATA_KEYS = ("name", "visible", "contrast_limits", "colormap", "metadata")
+
+# major and minor versions as int
+napari_version = tuple(map(int, list(version("napari").split(".")[:2])))
 
 
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
@@ -128,6 +131,12 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     for x in METADATA_KEYS:
                         if x in node.metadata:
                             metadata[x] = node.metadata[x]
+                        elif x == "colormap" and node.metadata["color"]:
+                            # key changed 'color' -> 'colormap' in napari 0.5
+                            if napari_version >= (0, 5):
+                                metadata["colormap"] = node.metadata["color"]
+                            else:
+                                metadata["color"] = node.metadata["color"]
                     if channel_axis is not None:
                         data = [
                             np.squeeze(level, axis=channel_axis) for level in node.data
@@ -145,6 +154,9 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         for x in METADATA_KEYS:
                             if x in node.metadata:
                                 metadata[x] = node.metadata[x]
+                        # overwrite 'name' if we have 'channel_names'
+                        if "channel_names" in node.metadata:
+                            metadata["name"] = node.metadata["channel_names"]
                     else:
                         # single channel image, so metadata just needs
                         # single items (not lists)
@@ -154,6 +166,10 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                                     metadata[x] = node.metadata[x][0]
                                 except Exception:
                                     pass
+                        # overwrite 'name' if we have 'channel_names'
+                        if "channel_names" in node.metadata:
+                            if len(node.metadata["channel_names"]) > 0:
+                                metadata["name"] = node.metadata["channel_names"][0]
 
                 properties = transform_properties(node.metadata.get("properties"))
                 if properties is not None:
