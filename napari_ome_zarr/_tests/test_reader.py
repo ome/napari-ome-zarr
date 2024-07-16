@@ -90,10 +90,6 @@ class TestNapari:
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
-    @pytest.mark.skipif(
-        not sys.platform.startswith("darwin"),
-        reason="Qt builds are failing on Windows and Ubuntu",
-    )
     def test_viewer(self, make_napari_viewer):
         """example of testing the viewer."""
         viewer = make_napari_viewer()
