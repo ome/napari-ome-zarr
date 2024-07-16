@@ -9,7 +9,6 @@ from ome_zarr.io import parse_url
 from ome_zarr.writer import write_multiscale
 
 from napari_ome_zarr import napari_get_reader
-from napari_ome_zarr._reader import napari_get_reader
 
 
 class TestNapari:
