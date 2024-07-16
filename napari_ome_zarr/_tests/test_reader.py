@@ -125,7 +125,7 @@ class TestNapari:
         assert layer.data_level == 2
 
 
-def test_single_channel_name(tmp_path: Path):
+def test_single_channel_meta(tmp_path: Path):
     data = [np.zeros((64, 32)), np.zeros((32, 16))]
     zarr_path = tmp_path / "test.zarr"
     store = parse_url(zarr_path, mode="w").store
@@ -138,4 +138,4 @@ def test_single_channel_name(tmp_path: Path):
 
     assert len(layers) == 1
     _, read_metadata, _ = layers[0]
-    assert read_metadata["name"] == "kermit"
+    assert read_metadata == {"scale": (1.0, 1.0), "name": "kermit"}
