@@ -1,9 +1,14 @@
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
+import zarr
 from ome_zarr.data import astronaut, create_zarr
+from ome_zarr.io import parse_url
+from ome_zarr.writer import write_multiscale
 
+from napari_ome_zarr import napari_get_reader
 from napari_ome_zarr._reader import napari_get_reader
 
 
@@ -116,3 +121,22 @@ class TestNapari:
             assert layer.data_level == 2
         except AttributeError:
             pass
+        # Check that current level is first large enough to fill the canvas with
+        # a greater than one pixel depth
+        assert layer.data_level == 2
+
+
+def test_single_channel_name(tmp_path: Path):
+    data = [np.zeros((64, 32)), np.zeros((32, 16))]
+    zarr_path = tmp_path / "test.zarr"
+    store = parse_url(zarr_path, mode="w").store
+    root = zarr.group(store=store)
+    write_multiscale(data, group=root, name="kermit")
+
+    reader = napari_get_reader(zarr_path)
+    assert reader is not None
+    layers = reader(zarr_path)
+
+    assert len(layers) == 1
+    _, read_metadata, _ = layers[0]
+    assert read_metadata["name"] == "kermit"
