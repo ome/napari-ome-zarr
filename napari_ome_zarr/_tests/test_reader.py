@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -9,10 +10,18 @@ from napari_ome_zarr._reader import napari_get_reader
 
 class TestNapari:
     @pytest.fixture(autouse=True)
-    def initdir(self, tmpdir):
-        self.path_3d = tmpdir.mkdir("data_3d")
-        create_zarr(str(self.path_3d), astronaut, "astronaut")
-        self.path_2d = tmpdir.mkdir("data_2d")
+    def initdir(self, tmp_path: Path):
+        """
+        Write some temporary test data.
+
+        create_zarr() creates an image pyramid and labels zarr directories.
+        """
+        self.path_3d = tmp_path / "data_3d"
+        self.path_3d.mkdir()
+        create_zarr(str(self.path_3d), method=astronaut, label_name="astronaut")
+
+        self.path_2d = tmp_path / "data_2d"
+        self.path_2d.mkdir()
         create_zarr(str(self.path_2d))
 
     def test_get_reader_hit(self):
@@ -81,12 +90,12 @@ class TestNapari:
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
-        filename = str(self.path_3d.join("labels"))
+        filename = str(self.path_3d / "labels")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
     def test_label(self):
-        filename = str(self.path_3d.join("labels", "astronaut"))
+        filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
