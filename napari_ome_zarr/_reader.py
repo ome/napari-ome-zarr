@@ -35,7 +35,8 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     zarr = parse_url(path)
     if zarr:
         reader = Reader(zarr)
-        return transform(reader())
+        rv = transform(reader())
+        return rv
     # Ignoring this path
     return None
 
@@ -141,7 +142,19 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         data = [
                             np.squeeze(level, axis=channel_axis) for level in node.data
                         ]
+                        metadata["name"] = [
+                            metadata.get("name", "unnamed") for x in range(3)
+                        ]
                 else:
+
+                    metadata["name"] = "unnamed"
+                    image = node.metadata.get("ome-xml:image", None)
+                    # Pull from OME-XML metadata
+                    if image:
+                        metadata["name"] = image.name
+
+                    # Pull from NGFF metadata?
+                    # TBD
                     # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
