@@ -162,10 +162,14 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                         # single items (not lists)
                         for x in METADATA_KEYS:
                             if x in node.metadata:
-                                try:
-                                    metadata[x] = node.metadata[x][0]
-                                except Exception:
-                                    pass
+                                if x == "name":
+                                    metadata["name"] = node.metadata["name"]
+                                else:
+                                    try:
+                                        metadata[x] = node.metadata[x][0]
+                                    except Exception:
+                                        pass
+
                         # overwrite 'name' if we have 'channel_names'
                         if "channel_names" in node.metadata:
                             if len(node.metadata["channel_names"]) > 0:
