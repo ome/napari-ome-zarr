@@ -88,13 +88,34 @@ class Multiscales(Spec):
             rsp["channel_axis"] = channel_axis
         if "omero" in attrs:
             colormaps = []
-            for ch in attrs["omero"]["channels"]:
+            ch_names = []
+            visibles = []
+            contrast_limits = []
+
+            for index, ch in enumerate(attrs["omero"]["channels"]):
                 color = ch.get("color", None)
                 if color is not None:
                     rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
                     # colormap is range: black -> rgb color
                     colormaps.append(Colormap([[0, 0, 0], rgb]))
+                ch_names.append(ch.get("label", str(index)))
+                visibles.append(ch.get("active", True))
+
+                window = ch.get("window", None)
+                if window is not None:
+                    start = window.get("start", None)
+                    end = window.get("end", None)
+                    if start is None or end is None:
+                        # Disable contrast limits settings if one is missing
+                        contrast_limits = None
+                    elif contrast_limits is not None:
+                        contrast_limits.append([start, end])
+
             rsp["colormap"] = colormaps
+            rsp["name"] = ch_names
+            rsp["contrast_limits"] = contrast_limits
+            rsp["visible"] = visibles
+
         return rsp
 
 class Bioformats2raw(Spec):
