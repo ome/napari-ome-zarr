@@ -1,28 +1,24 @@
-
-
 # zarr v3
 
-import zarr
-from zarr import Group
-import numpy as np
-import dask.array as da
-from typing import List
-from vispy.color import Colormap
-
 from typing import Any, Callable, Dict, List, Tuple, Union
+
+import dask.array as da
+import numpy as np
+import zarr
+from vispy.color import Colormap
+from zarr import Group
 
 LayerData = Union[Tuple[Any], Tuple[Any, Dict], Tuple[Any, Dict, str]]
 
 
-class Spec():
-
+class Spec:
     def __init__(self, group: Group):
         self.group = group
 
     @staticmethod
     def matches(group: Group) -> bool:
         return False
-    
+
     def data(self) -> List[da.core.Array] | None:
         return None
 
@@ -36,8 +32,7 @@ class Spec():
     def iter_nodes(self):
         yield self
         for child in self.children():
-            for ch in child.iter_nodes():
-                yield ch
+            yield from child.iter_nodes()
 
     def iter_data(self):
         for node in self.iter_nodes():
@@ -53,7 +48,6 @@ class Spec():
 
 
 class Multiscales(Spec):
-
     @staticmethod
     def matches(group: Group) -> bool:
         return "multiscales" in Spec.get_attrs(group)
@@ -97,8 +91,8 @@ class Multiscales(Spec):
             rsp["colormap"] = colormaps
         return rsp
 
-class Bioformats2raw(Spec):
 
+class Bioformats2raw(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
         attrs = Spec.get_attrs(group)
@@ -114,17 +108,15 @@ class Bioformats2raw(Spec):
             if Multiscales.matches(g):
                 rv.append(Multiscales(g))
         return rv
-    
+
 
 class Plate(Spec):
-
     @staticmethod
     def matches(group: Group) -> bool:
         return "plate" in Spec.get_attrs(group)
 
 
 class Label(Multiscales):
-
     @staticmethod
     def matches(group: Group) -> bool:
         # label must also be Multiscales
@@ -138,12 +130,10 @@ class Label(Multiscales):
 
 
 def read_ome_zarr(url):
-
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
-
         results: List[LayerData] = list()
 
-        # TODO: handle missing file 
+        # TODO: handle missing file
         root_group = zarr.open(url)
 
         print("Root group", root_group.attrs.asdict())
@@ -170,5 +160,5 @@ def read_ome_zarr(url):
                 results.append(rv)
 
         return results
-    
+
     return f

@@ -10,11 +10,13 @@ from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
-from .ome_zarr_reader import read_ome_zarr
+
 # from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
+
+from .ome_zarr_reader import read_ome_zarr
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
