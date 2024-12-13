@@ -10,7 +10,8 @@ from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
-from ome_zarr.io import parse_url
+from .ome_zarr_reader import read_ome_zarr
+# from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
 from vispy.color import Colormap
@@ -32,12 +33,13 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
         if len(path) > 1:
             warnings.warn("more than one path is not currently supported")
         path = path[0]
-    zarr = parse_url(path)
-    if zarr:
-        reader = Reader(zarr)
-        return transform(reader())
-    # Ignoring this path
-    return None
+    return read_ome_zarr(path)
+    # zarr = parse_url(path)
+    # if zarr:
+    #     reader = Reader(zarr)
+    #     return transform(reader())
+    # # Ignoring this path
+    # return None
 
 
 def transform_properties(
