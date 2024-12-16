@@ -111,10 +111,16 @@ class Multiscales(Spec):
                     elif contrast_limits is not None:
                         contrast_limits.append([start, end])
 
-            rsp["colormap"] = colormaps
-            rsp["name"] = ch_names
-            rsp["contrast_limits"] = contrast_limits
-            rsp["visible"] = visibles
+            if rsp.get("channel_axis") is not None:
+                rsp["colormap"] = colormaps
+                rsp["name"] = ch_names
+                rsp["contrast_limits"] = contrast_limits
+                rsp["visible"] = visibles
+            else:
+                rsp["colormap"] = colormaps[0]
+                rsp["name"] = ch_names[0]
+                rsp["contrast_limits"] = contrast_limits[0]
+                rsp["visible"] = visibles[0]
 
         return rsp
 
