@@ -3,7 +3,6 @@
 It implements the ``napari_get_reader`` hook specification, (to create a reader plugin).
 """
 
-
 import logging
 import warnings
 from importlib.metadata import version
