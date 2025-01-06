@@ -4,12 +4,15 @@
 
 import zarr
 from zarr import Group
-import numpy as np
+from zarr.core.sync import SyncMixin
+from zarr.core.buffer import default_buffer_prototype
+
 import dask.array as da
 from typing import List
 from vispy.color import Colormap
+from xml.etree import ElementTree as ET
 
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 LayerData = Union[Tuple[Any], Tuple[Any, Dict], Tuple[Any, Dict, str]]
 
@@ -133,14 +136,28 @@ class Bioformats2raw(Spec):
         return "bioformats2raw.layout" in attrs and "plate" not in attrs
 
     def children(self):
-        # TDOO: lookup children from series of OME/METADATA.xml
-        childnames = ["0"]
+        # lookup children from series of OME/METADATA.xml
+        xml_data = SyncMixin()._sync(self.group.store.get("OME/METADATA.ome.xml", prototype=default_buffer_prototype()))
+        # print("xml_data", xml_data.to_bytes())
+        root = ET.fromstring(xml_data.to_bytes())
         rv = []
-        for name in childnames:
-            g = self.group[name]
-            if Multiscales.matches(g):
-                rv.append(Multiscales(g))
+        for child in root:
+            # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
+            print(child.tag)
+            node_id = child.attrib.get("ID", "")
+            if child.tag.endswith("Image") and node_id.startswith("Image:"):
+                print("Image ID", node_id)
+                image_path = node_id.replace("Image:", "")
+                g = self.group[image_path]
+                if Multiscales.matches(g):
+                    rv.append(Multiscales(g))
         return rv
+
+    # override to NOT yield self since node has no data
+    def iter_nodes(self):
+        for child in self.children():
+            for ch in child.iter_nodes():
+                yield ch
     
 
 class Plate(Spec):
