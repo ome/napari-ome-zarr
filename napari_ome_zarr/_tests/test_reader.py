@@ -3,9 +3,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
 
-from napari_ome_zarr._reader import napari_get_reader
+from napari_ome_zarr._reader import _match_colors_to_available_colormap, napari_get_reader
 
 
 class TestNapari:
@@ -66,11 +67,13 @@ class TestNapari:
         if path == "path_3d":
             assert 0 == metadata["channel_axis"]
             assert ["Red", "Green", "Blue"] == metadata["name"]
+            assert [AVAILABLE_COLORMAPS['red'], AVAILABLE_COLORMAPS['green'], AVAILABLE_COLORMAPS['blue']] == metadata['colormap']
             assert [[0, 255]] * 3 == metadata["contrast_limits"]
             assert [visible_1] * 3 == metadata["visible"]
         else:
             assert "channel_axis" not in metadata
             assert metadata["name"] == "channel_0"
+            assert metadata['colormap'] == AVAILABLE_COLORMAPS['gray']
             assert metadata["contrast_limits"] == [0, 255]
             assert metadata["visible"] == visible_1
 
@@ -125,3 +128,16 @@ class TestNapari:
             assert layer.data_level == 2
         except AttributeError:
             pass
+
+@pytest.mark.parametrize(
+    "colors, expected_name",
+    [
+        ([[0, 0, 0], [0.0, 0.0, 1.0]], "blue"),  # Existing napari colormap
+        ([[0, 0, 0], [0.0, 0.0, 0.9]], "custom"),  # Custom colormap
+    ],
+)
+def test_match_colors_to_available_colormap(colors, expected_name):
+    colormap = Colormap(colors)
+    colormap = _match_colors_to_available_colormap(colormap)
+    assert colormap.name == expected_name
+    
