@@ -110,7 +110,6 @@ class TestNapari:
         self.assert_layers(layers, False, True)
 
 
-
 @pytest.mark.parametrize(
     "colors, expected_name",
     [
