@@ -7,7 +7,7 @@ It implements the ``napari_get_reader`` hook specification, (to create a reader 
 import logging
 import warnings
 from importlib.metadata import version
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap, ensure_colormap
@@ -109,9 +109,9 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     """
     for available_cmap in AVAILABLE_COLORMAPS.values():
         if (
-            np.array_equal(available_cmap.controls, custom_cmap.controls)
-            and np.array_equal(available_cmap.colors, custom_cmap.colors)
-            and available_cmap.interpolation == custom_cmap.interpolation
+            np.array_equal(available_cmap.controls, custom_cmap.controls) and
+            np.array_equal(available_cmap.colors, custom_cmap.colors) and
+            available_cmap.interpolation == custom_cmap.interpolation
         ):
             custom_cmap = available_cmap
             break
