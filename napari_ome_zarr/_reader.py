@@ -103,7 +103,7 @@ def transform_scale(
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     """Helper function to match Colormap to an existing napari Colormap.
-    
+
     If the colormap matches, return the specific napari Colormap, otherwise return the
     the original Colormap.
     """
@@ -117,6 +117,7 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
             break
 
     return custom_cmap
+
 
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
