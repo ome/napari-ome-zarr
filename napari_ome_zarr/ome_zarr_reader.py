@@ -13,6 +13,7 @@ from vispy.color import Colormap
 from xml.etree import ElementTree as ET
 
 from typing import Any, Dict, List, Tuple, Union
+from .plate import get_pyramid_lazy, get_first_well, get_first_field_path
 
 LayerData = Union[Tuple[Any], Tuple[Any, Dict], Tuple[Any, Dict, str]]
 
@@ -166,6 +167,15 @@ class Plate(Spec):
     def matches(group: Group) -> bool:
         return "plate" in Spec.get_attrs(group)
 
+    def data(self):
+        # we want to return a dask pyramid...
+        return get_pyramid_lazy(self.group)
+
+    def metadata(self):
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        return Multiscales(image_group).metadata()
 
 class Label(Multiscales):
 
