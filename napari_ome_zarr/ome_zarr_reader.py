@@ -177,6 +177,44 @@ class Plate(Spec):
         image_group = well_group[first_field_path]
         return Multiscales(image_group).metadata()
 
+    
+    def children(self):
+        # Plate has children If it has labels - check one Well...
+        # Child is PlateLabels
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        labels_group = image_group.get("labels", None)
+        if labels_group is not None:
+            labels_attrs = Spec.get_attrs(labels_group)
+            if "labels" in labels_attrs:
+                ch = []
+                for labels_path in labels_attrs["labels"]:
+                    print("labels_path", labels_path)
+                    ch.append(PlateLabels(self.group, labels_path=labels_path))
+                return ch
+
+
+class PlateLabels(Plate):
+
+    def __init__(self, group: Group, labels_path: str):
+        super().__init__(group)
+        self.labels_path = labels_path
+
+    def data(self):
+        # return a dask pyramid...
+        return get_pyramid_lazy(self.group, self.labels_path)
+    
+    def children(self):
+        # Need to override Plate.children()
+        return []
+    
+    def metadata(self) -> Dict[str, Any] | None:
+        # override Plate metadata (no channel-axis etc)
+        # TODO: read image-label metadata, colors etc
+        return {"name": f"labels/{self.labels_path}",}
+
+
 class Label(Multiscales):
 
     @staticmethod
@@ -217,7 +255,7 @@ def read_ome_zarr(url):
                 node_data = node.data()
                 metadata = node.metadata()
                 # print(Spec.get_attrs(node.group))
-                if Label.matches(node.group):
+                if Label.matches(node.group) or isinstance(node, PlateLabels):
                     rv: LayerData = (node_data, metadata, "labels")
                 else:
                     rv: LayerData = (node_data, metadata)

@@ -10,7 +10,7 @@ def get_attrs(group: Group):
     return group.attrs
 
 
-def get_pyramid_lazy(plate_group) -> None:
+def get_pyramid_lazy(plate_group, labels_path=None) -> None:
     """
     Return a pyramid of dask data, where the highest resolution is the
     stitched full-resolution images.
@@ -22,6 +22,11 @@ def get_pyramid_lazy(plate_group) -> None:
     # Get the first well...
     well_group = get_first_well(plate_group)
     first_field_path = get_first_field_path(well_group)
+
+    if labels_path:
+        first_field_path = first_field_path + "/labels/" + labels_path
+
+    print("get_pyramid_lazy: first_field_path", first_field_path)
     image_group = well_group[first_field_path]
 
     # We assume all images are same shape & dtype as the first one
