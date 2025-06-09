@@ -8,6 +8,7 @@ import warnings
 
 from .ome_zarr_reader import read_ome_zarr
 
+
 def napari_get_reader(path):
     """Returns a reader for supported paths that include IDR ID.
 

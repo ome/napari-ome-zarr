@@ -1,7 +1,6 @@
-
-from zarr import Group
 import dask.array as da
 import numpy as np
+from zarr import Group
 
 
 def get_attrs(group: Group):
@@ -38,7 +37,9 @@ def get_pyramid_lazy(plate_group, labels_path=None) -> None:
     # Create a dask pyramid for the plate
     pyramid = []
     for level, tile_shape in enumerate(img_pyramid_shapes):
-        lazy_plate = get_stitched_grid(plate_group, level, tile_shape, numpy_type, first_field_path)
+        lazy_plate = get_stitched_grid(
+            plate_group, level, tile_shape, numpy_type, first_field_path
+        )
         pyramid.append(lazy_plate)
 
     # Use the first image's metadata for viewing the whole Plate
@@ -49,8 +50,9 @@ def get_pyramid_lazy(plate_group, labels_path=None) -> None:
     return pyramid
 
 
-def get_stitched_grid(plate_group, level: int, tile_shape: tuple, numpy_type, first_field_path) -> da.core.Array:
-
+def get_stitched_grid(
+    plate_group, level: int, tile_shape: tuple, numpy_type, first_field_path
+) -> da.core.Array:
     plate_data = get_attrs(plate_group)["plate"]
     rows = plate_data.get("rows")
     columns = plate_data.get("columns")
@@ -84,9 +86,7 @@ def get_stitched_grid(plate_group, level: int, tile_shape: tuple, numpy_type, fi
     lazy_rows = []
     # For level 0, return whole image for each tile
     for row in range(row_count):
-        lazy_row: list[da.Array] = [
-            get_tile(row, col) for col in range(column_count)
-        ]
+        lazy_row: list[da.Array] = [get_tile(row, col) for col in range(column_count)]
         lazy_rows.append(da.concatenate(lazy_row, axis=len(lazy_row[0].shape) - 1))
     return da.concatenate(lazy_rows, axis=len(lazy_rows[0].shape) - 2)
 
@@ -110,4 +110,3 @@ def get_first_field_path(well_group):
 
     first_field_path = well_data["images"][0]["path"]
     return first_field_path
-
