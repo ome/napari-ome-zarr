@@ -1,7 +1,5 @@
-import sys
 from pathlib import Path
 
-import numpy as np
 import pytest
 from ome_zarr.data import astronaut, create_zarr
 
