@@ -91,7 +91,7 @@ class Multiscales(Spec):
             colormaps = []
             ch_names = []
             visibles = []
-            contrast_limits: list[tuple[int, int]] = []
+            contrast_limits: list[list[int]] = []
 
             for index, ch in enumerate(attrs["omero"]["channels"]):
                 color = ch.get("color", None)
@@ -109,7 +109,7 @@ class Multiscales(Spec):
                     if start is not None and end is not None:
                         # skip if None. Otherwise check no previous skip
                         if len(contrast_limits) == index:
-                            contrast_limits.append((start, end))
+                            contrast_limits.append([start, end])
 
             if rsp.get("channel_axis") is not None:
                 rsp["colormap"] = colormaps
