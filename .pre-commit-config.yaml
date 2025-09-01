@@ -58,7 +58,7 @@ repos:
           # black/flake8 interactions
           # https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html#minimal-configuration
           "--max-line-length=88",
-          "--ignore=E203, E701",
+          "--extend-ignore=E203, E701",
           "--rst-roles=class,func,ref,module,const",
           "--exclude=docs/conf.py",
         ]
