@@ -96,7 +96,7 @@ class Multiscales(Spec):
                     rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
                     # colormap is range: black -> rgb color
                     colormaps.append(Colormap([[0, 0, 0], rgb]))
-                ch_names.append(ch.get("label", str(index)))
+                ch_names.append(ch.get("label", f'channel_{index}'))
                 visibles.append(ch.get("active", True))
 
                 window = ch.get("window", None)
@@ -211,6 +211,20 @@ class PlateLabels(Plate):
         }
 
 
+class Labels(Spec):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        return "labels" in Spec.get_attrs(group)
+
+    # override to NOT yield self since node has no data
+    def iter_nodes(self):
+        attrs = Spec.get_attrs(self.group)
+        for name in attrs["labels"]:
+            g = self.group[name]
+            if Label.matches(g):
+                yield Label(g)
+
+
 class Label(Multiscales):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -221,15 +235,24 @@ class Label(Multiscales):
 
     def metadata(self) -> Dict[str, Any] | None:
         # override Multiscales metadata
-        return {}
+        # call super
+        ms_data = super().metadata()
+        print("Label metadata", ms_data)
+        if ms_data is None:
+            ms_data = {}
+        return {
+            "name": f"labels{self.group.name}",
+            "visible": False,   # labels not visible initially
+            **ms_data,
+        }
 
 
-def read_ome_zarr(url):
+def read_ome_zarr(root_group):
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
 
-        # TODO: handle missing file
-        root_group = zarr.open(url)
+        # # TODO: handle missing file
+        # root_group = zarr.open(url)
 
         print("Root group", root_group.attrs.asdict())
 
@@ -239,6 +262,10 @@ def read_ome_zarr(url):
             spec = Multiscales(root_group)
         elif Plate.matches(root_group):
             spec = Plate(root_group)
+        elif Labels.matches(root_group):
+            spec = Labels(root_group)
+        else:
+            print("No matching spec", root_group)
 
         if spec:
             print("spec", spec)
@@ -251,7 +278,7 @@ def read_ome_zarr(url):
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     rv: LayerData = (node_data, metadata, "labels")
                 else:
-                    rv: LayerData = (node_data, metadata)
+                    rv: LayerData = (node_data, metadata, "image")
                 results.append(rv)
 
         return results
