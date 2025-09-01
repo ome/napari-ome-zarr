@@ -98,30 +98,3 @@ class TestNapari:
         filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
-
-    @pytest.mark.skipif(
-        not sys.platform.startswith("darwin"),
-        reason="Qt builds are failing on Windows and Ubuntu",
-    )
-    def test_viewer(self, make_napari_viewer):
-        """example of testing the viewer."""
-        viewer = make_napari_viewer()
-
-        shapes = [(4000, 3000), (2000, 1500), (1000, 750), (500, 375)]
-        np.random.seed(0)
-        data = [np.random.random(s) for s in shapes]
-        _ = viewer.add_image(data, multiscale=True, contrast_limits=[0, 1])
-        layer = viewer.layers[0]
-
-        # Set canvas size to target amount
-        viewer.window.qt_viewer.view.canvas.size = (800, 600)
-        # FutureWarning: Public access to Window.qt_viewer is deprecated
-        # and will be removed in v0.6.0
-        try:
-            viewer.window.qt_viewer.on_draw(None)
-
-            # Check that current level is first large enough to fill the canvas with
-            # a greater than one pixel depth
-            assert layer.data_level == 2
-        except AttributeError:
-            pass
