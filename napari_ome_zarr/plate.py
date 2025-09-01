@@ -1,15 +1,16 @@
 import dask.array as da
 import numpy as np
+from numpy._typing import DTypeLike
 from zarr import Group
 
 
-def get_attrs(group: Group):
+def get_attrs(group: Group) -> dict:
     if "ome" in group.attrs:
         return group.attrs["ome"]
     return group.attrs
 
 
-def get_pyramid_lazy(plate_group, labels_path=None) -> None:
+def get_pyramid_lazy(plate_group: Group, labels_path: str | None = None) -> list:
     """
     Return a pyramid of dask data, where the highest resolution is the
     stitched full-resolution images.
@@ -51,7 +52,11 @@ def get_pyramid_lazy(plate_group, labels_path=None) -> None:
 
 
 def get_stitched_grid(
-    plate_group, level: int, tile_shape: tuple, numpy_type, first_field_path
+    plate_group: Group,
+    level: int,
+    tile_shape: tuple,
+    numpy_type: DTypeLike,
+    first_field_path: str,
 ) -> da.core.Array:
     plate_data = get_attrs(plate_group)["plate"]
     rows = plate_data.get("rows")
@@ -91,7 +96,7 @@ def get_stitched_grid(
     return da.concatenate(lazy_rows, axis=len(lazy_rows[0].shape) - 2)
 
 
-def get_first_well(plate_group):
+def get_first_well(plate_group: Group) -> Group:
     plate_data = get_attrs(plate_group)["plate"]
     well_paths = [well["path"] for well in plate_data.get("wells")]
     well_paths.sort()
@@ -103,7 +108,7 @@ def get_first_well(plate_group):
     return well_group
 
 
-def get_first_field_path(well_group):
+def get_first_field_path(well_group: Group) -> str:
     well_data = get_attrs(well_group)["well"]
     if well_data is None:
         raise Exception("Could not find well data")

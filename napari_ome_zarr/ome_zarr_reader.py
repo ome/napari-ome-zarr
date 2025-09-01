@@ -1,6 +1,7 @@
 # zarr v3
 
-from typing import Any, Dict, List, Tuple, Union
+from abc import ABC
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
 import dask.array as da
@@ -12,40 +13,42 @@ from zarr.core.sync import SyncMixin
 
 from .plate import get_first_field_path, get_first_well, get_pyramid_lazy
 
-LayerData = Union[Tuple[Any], Tuple[Any, Dict], Tuple[Any, Dict, str]]
+# StrDict = Dict[str, Any]
+# LayerData = Union[Tuple[Any], Tuple[Any, StrDict], Tuple[Any, StrDict, str]]
+LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
 
 
-class Spec:
-    def __init__(self, group: Group):
+class Spec(ABC):
+    def __init__(self, group: Group) -> None:
         self.group = group
 
     @staticmethod
     def matches(group: Group) -> bool:
         return False
 
-    def data(self) -> List[da.core.Array] | None:
-        return None
+    def data(self) -> List[da.core.Array]:
+        return []
 
-    def metadata(self) -> Dict[str, Any] | None:
+    def metadata(self) -> Dict[str, Any]:
         # napari layer metadata
         return {}
 
-    def children(self):
+    def children(self) -> list["Spec"]:
         return []
 
-    def iter_nodes(self):
+    def iter_nodes(self) -> Iterable["Spec"]:
         yield self
         for child in self.children():
             yield from child.iter_nodes()
 
-    def iter_data(self):
+    def iter_data(self) -> Iterable[da.core.Array]:
         for node in self.iter_nodes():
             data = node.data()
             if data:
                 yield data
 
     @staticmethod
-    def get_attrs(group: Group):
+    def get_attrs(group: Group) -> dict:
         if "ome" in group.attrs:
             return group.attrs["ome"]
         return group.attrs
@@ -56,8 +59,8 @@ class Multiscales(Spec):
     def matches(group: Group) -> bool:
         return "multiscales" in Spec.get_attrs(group)
 
-    def children(self):
-        ch = []
+    def children(self) -> list[Spec]:
+        ch: list[Spec] = []
         # test for child "labels"
         try:
             grp = self.group["labels"]
@@ -71,13 +74,13 @@ class Multiscales(Spec):
             pass
         return ch
 
-    def data(self):
+    def data(self) -> list[da.core.Array]:
         attrs = Spec.get_attrs(self.group)
         paths = [ds["path"] for ds in attrs["multiscales"][0]["datasets"]]
         return [da.from_zarr(self.group[path]) for path in paths]
 
-    def metadata(self):
-        rsp = {}
+    def metadata(self) -> Dict[str, Any]:
+        rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
         axes = attrs["multiscales"][0]["axes"]
         atypes = [axis["type"] for axis in axes]
@@ -88,7 +91,7 @@ class Multiscales(Spec):
             colormaps = []
             ch_names = []
             visibles = []
-            contrast_limits = []
+            contrast_limits: list[tuple[int, int]] = []
 
             for index, ch in enumerate(attrs["omero"]["channels"]):
                 color = ch.get("color", None)
@@ -96,28 +99,29 @@ class Multiscales(Spec):
                     rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
                     # colormap is range: black -> rgb color
                     colormaps.append(Colormap([[0, 0, 0], rgb]))
-                ch_names.append(ch.get("label", f'channel_{index}'))
+                ch_names.append(ch.get("label", f"channel_{index}"))
                 visibles.append(ch.get("active", True))
 
                 window = ch.get("window", None)
                 if window is not None:
                     start = window.get("start", None)
                     end = window.get("end", None)
-                    if start is None or end is None:
-                        # Disable contrast limits settings if one is missing
-                        contrast_limits = None
-                    elif contrast_limits is not None:
-                        contrast_limits.append([start, end])
+                    if start is not None and end is not None:
+                        # skip if None. Otherwise check no previous skip
+                        if len(contrast_limits) == index:
+                            contrast_limits.append((start, end))
 
             if rsp.get("channel_axis") is not None:
                 rsp["colormap"] = colormaps
                 rsp["name"] = ch_names
-                rsp["contrast_limits"] = contrast_limits
+                if len(contrast_limits) > 0:
+                    rsp["contrast_limits"] = contrast_limits
                 rsp["visible"] = visibles
             else:
                 rsp["colormap"] = colormaps[0]
                 rsp["name"] = ch_names[0]
-                rsp["contrast_limits"] = contrast_limits[0]
+                if len(contrast_limits) > 0:
+                    rsp["contrast_limits"] = contrast_limits[0]
                 rsp["visible"] = visibles[0]
 
         return rsp
@@ -130,7 +134,7 @@ class Bioformats2raw(Spec):
         # Don't consider "plate" as a Bioformats2raw layout
         return "bioformats2raw.layout" in attrs and "plate" not in attrs
 
-    def children(self):
+    def children(self) -> list[Spec]:
         # lookup children from series of OME/METADATA.xml
         xml_data = SyncMixin()._sync(
             self.group.store.get(
@@ -139,7 +143,7 @@ class Bioformats2raw(Spec):
         )
         # print("xml_data", xml_data.to_bytes())
         root = ET.fromstring(xml_data.to_bytes())
-        rv = []
+        rv: list[Spec] = []
         for child in root:
             # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
             print(child.tag)
@@ -153,7 +157,7 @@ class Bioformats2raw(Spec):
         return rv
 
     # override to NOT yield self since node has no data
-    def iter_nodes(self):
+    def iter_nodes(self) -> Iterable[Spec]:
         for child in self.children():
             yield from child.iter_nodes()
 
@@ -163,17 +167,17 @@ class Plate(Spec):
     def matches(group: Group) -> bool:
         return "plate" in Spec.get_attrs(group)
 
-    def data(self):
+    def data(self) -> list[da.core.Array]:
         # we want to return a dask pyramid...
         return get_pyramid_lazy(self.group)
 
-    def metadata(self):
+    def metadata(self) -> dict:
         well_group = get_first_well(self.group)
         first_field_path = get_first_field_path(well_group)
         image_group = well_group[first_field_path]
         return Multiscales(image_group).metadata()
 
-    def children(self):
+    def children(self) -> list[Spec]:
         # Plate has children If it has labels - check one Well...
         # Child is PlateLabels
         well_group = get_first_well(self.group)
@@ -183,11 +187,12 @@ class Plate(Spec):
         if labels_group is not None:
             labels_attrs = Spec.get_attrs(labels_group)
             if "labels" in labels_attrs:
-                ch = []
+                ch: list[Spec] = []
                 for labels_path in labels_attrs["labels"]:
                     print("labels_path", labels_path)
                     ch.append(PlateLabels(self.group, labels_path=labels_path))
                 return ch
+        return []
 
 
 class PlateLabels(Plate):
@@ -195,15 +200,15 @@ class PlateLabels(Plate):
         super().__init__(group)
         self.labels_path = labels_path
 
-    def data(self):
+    def data(self) -> list[da.core.Array]:
         # return a dask pyramid...
         return get_pyramid_lazy(self.group, self.labels_path)
 
-    def children(self):
+    def children(self) -> list[Spec]:
         # Need to override Plate.children()
         return []
 
-    def metadata(self) -> Dict[str, Any] | None:
+    def metadata(self) -> dict:
         # override Plate metadata (no channel-axis etc)
         # TODO: read image-label metadata, colors etc
         return {
@@ -217,7 +222,7 @@ class Labels(Spec):
         return "labels" in Spec.get_attrs(group)
 
     # override to NOT yield self since node has no data
-    def iter_nodes(self):
+    def iter_nodes(self) -> Iterable[Spec]:
         attrs = Spec.get_attrs(self.group)
         for name in attrs["labels"]:
             g = self.group[name]
@@ -233,7 +238,7 @@ class Label(Multiscales):
             return False
         return "image-label" in Spec.get_attrs(group)
 
-    def metadata(self) -> Dict[str, Any] | None:
+    def metadata(self) -> Dict[str, Any]:
         # override Multiscales metadata
         # call super
         ms_data = super().metadata()
@@ -242,12 +247,12 @@ class Label(Multiscales):
             ms_data = {}
         return {
             "name": f"labels{self.group.name}",
-            "visible": False,   # labels not visible initially
+            "visible": False,  # labels not visible initially
             **ms_data,
         }
 
 
-def read_ome_zarr(root_group):
+def read_ome_zarr(root_group: Group) -> Callable:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
 
@@ -255,6 +260,8 @@ def read_ome_zarr(root_group):
         # root_group = zarr.open(url)
 
         print("Root group", root_group.attrs.asdict())
+
+        spec: Spec | None = None
 
         if Labels.matches(root_group):
             # Try starting at parent Image
@@ -290,11 +297,11 @@ def read_ome_zarr(root_group):
             for node in nodes:
                 node_data = node.data()
                 metadata = node.metadata()
+                layer_type = "image"
                 # print(Spec.get_attrs(node.group))
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
-                    rv: LayerData = (node_data, metadata, "labels")
-                else:
-                    rv: LayerData = (node_data, metadata, "image")
+                    layer_type = "labels"
+                rv: LayerData = (node_data, metadata, layer_type)
                 results.append(rv)
 
         return results
