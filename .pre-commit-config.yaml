@@ -55,10 +55,10 @@ repos:
           flake8-logging-format,
         ]
         args: [
-          # default black line length is 88
+          # black/flake8 interactions
+          # https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html#minimal-configuration
           "--max-line-length=88",
-          # Conflicts with black: E203 whitespace before ':'
-          "--ignore=E203",
+          "--ignore=E203, E701",
           "--rst-roles=class,func,ref,module,const",
           "--exclude=docs/conf.py",
         ]
