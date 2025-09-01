@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -102,9 +101,8 @@ class TestNapari:
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, True, False)
 
-    @pytest.mark.skipif(
-        not sys.platform.startswith("darwin"),
-        reason="Qt builds are failing on Windows and Ubuntu",
+    @pytest.mark.skip(
+        reason="Qt builds are failing on all platforms",
     )
     def test_viewer(self, make_napari_viewer):
         """example of testing the viewer."""
