@@ -95,12 +95,12 @@ class TestNapari:
         filename = str(self.path_3d / "labels")
         print(f"test_labels {filename}")
         layers = napari_get_reader(filename)()
-        self.assert_layers(layers, False, True)
+        self.assert_layers(layers, True, False)
 
     def test_label(self):
         filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
-        self.assert_layers(layers, False, True)
+        self.assert_layers(layers, True, False)
 
     @pytest.mark.skipif(
         not sys.platform.startswith("darwin"),

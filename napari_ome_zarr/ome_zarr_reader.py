@@ -256,14 +256,30 @@ def read_ome_zarr(root_group):
 
         print("Root group", root_group.attrs.asdict())
 
-        if Bioformats2raw.matches(root_group):
+        if Labels.matches(root_group):
+            # Try starting at parent Image
+            parent_path = root_group.store.root.parent
+            parent_group = zarr.open_group(parent_path)
+            if Multiscales.matches(parent_group):
+                spec = Multiscales(parent_group)
+            else:
+                # not sure how to handle this?
+                spec = Labels(root_group)
+        elif Label.matches(root_group):
+            # Try starting at parent Image - up 2 dirs
+            parent_path = root_group.store.root.parent.parent
+            parent_group = zarr.open_group(parent_path)
+            if Multiscales.matches(parent_group):
+                spec = Multiscales(parent_group)
+            else:
+                # not sure how to handle this?
+                spec = Label(root_group)
+        elif Bioformats2raw.matches(root_group):
             spec = Bioformats2raw(root_group)
         elif Multiscales.matches(root_group):
             spec = Multiscales(root_group)
         elif Plate.matches(root_group):
             spec = Plate(root_group)
-        elif Labels.matches(root_group):
-            spec = Labels(root_group)
         else:
             print("No matching spec", root_group)
 
