@@ -160,11 +160,10 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                             np.squeeze(level, axis=channel_axis) for level in node.data
                         ]
                 else:
-                    # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
                         if not isinstance(cm, Colormap):
-                            cms[idx] = ensure_colormap(cm)
+                            cms[idx] = Colormap(cm)
                         # Try to match colormap to an existing napari colormap
                         cms[idx] = _match_colors_to_available_colormap(cms[idx])
 
