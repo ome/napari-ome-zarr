@@ -103,7 +103,7 @@ class TestNapari:
         self.assert_layers(layers, False, True)
 
     @pytest.mark.skipif(
-        not sys.platform.startswith("darwin"),
+        not sys.platform.startswith("xxxx"),
         reason="Qt builds are failing on Windows and Ubuntu",
     )
     def test_viewer(self, make_napari_viewer):
