@@ -10,7 +10,7 @@ from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
-from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap, ensure_colormap
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
