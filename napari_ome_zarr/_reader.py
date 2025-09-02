@@ -9,10 +9,10 @@ from importlib.metadata import version
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
-from vispy.color import Colormap
 
 LOGGER = logging.getLogger("napari_ome_zarr.reader")
 
@@ -100,6 +100,24 @@ def transform_scale(
                 metadata["translate"] = tuple(translate)
 
 
+def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
+    """Helper function to match Colormap to an existing napari Colormap.
+
+    If the colormap matches, return the specific napari Colormap, otherwise return the
+    the original Colormap.
+    """
+    for available_cmap in AVAILABLE_COLORMAPS.values():
+        if (
+            np.array_equal(available_cmap.controls, custom_cmap.controls)
+            and np.array_equal(available_cmap.colors, custom_cmap.colors)
+            and available_cmap.interpolation == custom_cmap.interpolation
+        ):
+            custom_cmap = available_cmap
+            break
+
+    return custom_cmap
+
+
 def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
@@ -141,11 +159,12 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                             np.squeeze(level, axis=channel_axis) for level in node.data
                         ]
                 else:
-                    # Handle the removal of vispy requirement from ome-zarr-py
                     cms = node.metadata.get("colormap", [])
                     for idx, cm in enumerate(cms):
                         if not isinstance(cm, Colormap):
                             cms[idx] = Colormap(cm)
+                        # Try to match colormap to an existing napari colormap
+                        cms[idx] = _match_colors_to_available_colormap(cms[idx])
 
                     if channel_axis is not None:
                         # multi-channel; Copy known metadata values
