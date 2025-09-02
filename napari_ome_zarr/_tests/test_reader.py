@@ -1,8 +1,12 @@
+import math
 from pathlib import Path
 
+import numpy as np
 import pytest
+import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
+from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
 
 from napari_ome_zarr._reader import (
     _match_colors_to_available_colormap,
@@ -119,3 +123,89 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     colormap = Colormap(colors)
     colormap = _match_colors_to_available_colormap(colormap)
     assert colormap.name == expected_name
+
+
+class TestPlates:
+    @pytest.fixture(autouse=True)
+    def initdir(self, tmp_path: Path):
+        """
+        Write some temporary test data.
+
+        create_zarr() creates an image pyramid and labels zarr directories.
+        """
+        self.plate_path = tmp_path / "plate.zarr"
+
+        self.row_names = ["A", "B"]
+        self.col_names = ["1", "2", "3"]
+        self.well_paths = ["A/1", "A/2", "B/1", "B/3"]
+        self.field_paths = ["0", "1", "2"]
+        self.sizex = 1000
+        self.sizey = 500
+        self.sizez = 10
+        self.sizec = 3
+
+        def generate_data(well_idx, field_idx):
+            return np.ones(
+                (self.sizec, self.sizez, self.sizey, self.sizex), dtype=np.uint8
+            ) * (well_idx * 10 + field_idx * 5)
+
+        # write the plate of images and corresponding metadata
+        root = zarr.open_group(self.plate_path)
+        write_plate_metadata(root, self.row_names, self.col_names, self.well_paths)
+        for wi, wp in enumerate(self.well_paths):
+            row, col = wp.split("/")
+            row_group = root.require_group(row)
+            well_group = row_group.require_group(col)
+            write_well_metadata(well_group, self.field_paths)
+            for fi, field in enumerate(self.field_paths):
+                image_group = well_group.require_group(str(field))
+                write_image(image=generate_data(wi, fi), group=image_group, axes="czyx")
+
+    def test_read_plate(self):
+        layers = napari_get_reader(str(self.plate_path))()
+        assert len(layers) == 1
+        plate = layers[0]
+        data, metadata, layer_type = plate
+        assert data[0].shape == (
+            self.sizec,
+            self.sizez,
+            self.sizey * len(self.row_names),
+            self.sizex * len(self.col_names),
+        )
+
+        # check plate compared with an Image
+        well_path = self.plate_path / self.well_paths[0]
+        img_layers = napari_get_reader(str(well_path))()
+        assert len(img_layers) == 1
+        img_layer = img_layers[0]
+        img_data, img_metadata, img_layer_type = img_layer
+
+        # plate pyramid should have same number of resolutions as images
+        assert len(img_data) == len(data)
+
+        tilex = self.sizex
+        tiley = self.sizey
+        for data_n in data:
+            for col_idx, col in enumerate(self.col_names):
+                for row_idx, row in enumerate(self.row_names):
+                    well_path = f"{row}/{col}"
+                    expected_pixel_val = 0
+                    if well_path in self.well_paths:
+                        well_idx = self.well_paths.index(well_path)
+                        # field is 0
+                        expected_pixel_val = well_idx * 10
+                    # check pixel at top-left of each Well
+                    well_coord_y = tiley * row_idx
+                    well_coord_x = tilex * col_idx
+                    assert (
+                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                    )
+                    # check pixel in centre of each Well - same value
+                    well_coord_y = tiley * row_idx + tiley // 2
+                    well_coord_x = tilex * col_idx + tilex // 2
+                    assert (
+                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                    )
+
+            tilex = math.ceil(tilex / 2)
+            tiley = math.ceil(tiley / 2)
