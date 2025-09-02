@@ -10,6 +10,8 @@ repos:
     rev: 6.0.1
     hooks:
       - id: isort
+        args: ["--profile", "black", "--filter-files"]
+
 
   - repo: https://github.com/psf/black
     rev: 25.1.0
@@ -49,7 +51,6 @@ repos:
           # flake8-blind-except, FIXME
           flake8-builtins,
           flake8-rst-docstrings,
-          flake8-logging-format,
         ]
         args: [
           # black/flake8 interactions
