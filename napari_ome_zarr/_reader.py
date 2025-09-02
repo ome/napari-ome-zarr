@@ -3,7 +3,6 @@
 It implements the ``napari_get_reader`` hook specification, (to create a reader plugin).
 """
 
-
 import logging
 import warnings
 from importlib.metadata import version
@@ -41,7 +40,7 @@ def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
 
 
 def transform_properties(
-    props: Optional[Dict[str, Dict]] = None
+    props: Optional[Dict[str, Dict]] = None,
 ) -> Optional[Dict[str, List]]:
     """
     Transform properties
