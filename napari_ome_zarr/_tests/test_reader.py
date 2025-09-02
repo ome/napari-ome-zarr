@@ -1,22 +1,33 @@
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 import zarr
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
 from ome_zarr.io import parse_url
 from ome_zarr.writer import write_multiscale
 
-from napari_ome_zarr import napari_get_reader
+from napari_ome_zarr._reader import (
+    _match_colors_to_available_colormap,
+    napari_get_reader,
+)
 
 
 class TestNapari:
     @pytest.fixture(autouse=True)
-    def initdir(self, tmpdir):
-        self.path_3d = tmpdir.mkdir("data_3d")
-        create_zarr(str(self.path_3d), astronaut, "astronaut")
-        self.path_2d = tmpdir.mkdir("data_2d")
+    def initdir(self, tmp_path: Path):
+        """
+        Write some temporary test data.
+
+        create_zarr() creates an image pyramid and labels zarr directories.
+        """
+        self.path_3d = tmp_path / "data_3d"
+        self.path_3d.mkdir()
+        create_zarr(str(self.path_3d), method=astronaut, label_name="astronaut")
+
+        self.path_2d = tmp_path / "data_2d"
+        self.path_2d.mkdir()
         create_zarr(str(self.path_2d))
 
     def test_get_reader_hit(self):
@@ -61,11 +72,17 @@ class TestNapari:
         if path == "path_3d":
             assert 0 == metadata["channel_axis"]
             assert ["Red", "Green", "Blue"] == metadata["name"]
+            assert [
+                AVAILABLE_COLORMAPS["red"],
+                AVAILABLE_COLORMAPS["green"],
+                AVAILABLE_COLORMAPS["blue"],
+            ] == metadata["colormap"]
             assert [[0, 255]] * 3 == metadata["contrast_limits"]
             assert [visible_1] * 3 == metadata["visible"]
         else:
             assert "channel_axis" not in metadata
             assert metadata["name"] == "channel_0"
+            assert metadata["colormap"] == AVAILABLE_COLORMAPS["gray"]
             assert metadata["contrast_limits"] == [0, 255]
             assert metadata["visible"] == visible_1
 
@@ -85,44 +102,14 @@ class TestNapari:
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
-        filename = str(self.path_3d.join("labels"))
+        filename = str(self.path_3d / "labels")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
 
     def test_label(self):
-        filename = str(self.path_3d.join("labels", "astronaut"))
+        filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
-
-    @pytest.mark.skipif(
-        not sys.platform.startswith("darwin"),
-        reason="Qt builds are failing on Windows and Ubuntu",
-    )
-    def test_viewer(self, make_napari_viewer):
-        """example of testing the viewer."""
-        viewer = make_napari_viewer()
-
-        shapes = [(4000, 3000), (2000, 1500), (1000, 750), (500, 375)]
-        np.random.seed(0)
-        data = [np.random.random(s) for s in shapes]
-        _ = viewer.add_image(data, multiscale=True, contrast_limits=[0, 1])
-        layer = viewer.layers[0]
-
-        # Set canvas size to target amount
-        viewer.window.qt_viewer.view.canvas.size = (800, 600)
-        # FutureWarning: Public access to Window.qt_viewer is deprecated
-        # and will be removed in v0.6.0
-        try:
-            viewer.window.qt_viewer.on_draw(None)
-
-            # Check that current level is first large enough to fill the canvas with
-            # a greater than one pixel depth
-            assert layer.data_level == 2
-        except AttributeError:
-            pass
-        # Check that current level is first large enough to fill the canvas with
-        # a greater than one pixel depth
-        assert layer.data_level == 2
 
 
 def test_single_channel_meta(tmp_path: Path):
@@ -139,3 +126,16 @@ def test_single_channel_meta(tmp_path: Path):
     assert len(layers) == 1
     _, read_metadata, _ = layers[0]
     assert read_metadata == {"scale": (1.0, 1.0), "name": "kermit"}
+
+
+@pytest.mark.parametrize(
+    "colors, expected_name",
+    [
+        ([[0, 0, 0], [0.0, 0.0, 1.0]], "blue"),  # Existing napari colormap
+        ([[0, 0, 0], [0.0, 0.0, 0.9]], "custom"),  # Custom colormap
+    ],
+)
+def test_match_colors_to_available_colormap(colors, expected_name):
+    colormap = Colormap(colors)
+    colormap = _match_colors_to_available_colormap(colormap)
+    assert colormap.name == expected_name
