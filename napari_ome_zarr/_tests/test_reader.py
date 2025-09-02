@@ -1,8 +1,12 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
+import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
+from ome_zarr.io import parse_url
+from ome_zarr.writer import write_multiscale
 
 from napari_ome_zarr._reader import (
     _match_colors_to_available_colormap,
@@ -106,6 +110,22 @@ class TestNapari:
         filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, False, True)
+
+
+def test_single_channel_meta(tmp_path: Path):
+    data = [np.zeros((64, 32)), np.zeros((32, 16))]
+    zarr_path = tmp_path / "test.zarr"
+    store = parse_url(zarr_path, mode="w").store
+    root = zarr.group(store=store)
+    write_multiscale(data, group=root, name="kermit")
+
+    reader = napari_get_reader(zarr_path)
+    assert reader is not None
+    layers = reader(zarr_path)
+
+    assert len(layers) == 1
+    _, read_metadata, _ = layers[0]
+    assert read_metadata == {"scale": (1.0, 1.0), "name": "kermit"}
 
 
 @pytest.mark.parametrize(
