@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
+from napari.utils.transforms import Affine
 from ome_zarr.io import parse_url
 from ome_zarr.reader import Label, Node, Reader
 from ome_zarr.types import LayerData, PathLike, ReaderFunction
@@ -87,17 +88,27 @@ def transform_scale(
     """
     if "coordinateTransformations" in node_metadata:
         level_0_transforms = node_metadata["coordinateTransformations"][0]
+
+        aff = Affine()
         for transf in level_0_transforms:
             if "scale" in transf:
                 scale = transf["scale"]
                 if channel_axis is not None:
                     scale.pop(channel_axis)
-                metadata["scale"] = tuple(scale)
+                scale_aff = Affine(scale=scale)
+                aff = scale_aff.compose(aff)
             if "translation" in transf:
                 translate = transf["translation"]
                 if channel_axis is not None:
                     translate.pop(channel_axis)
-                metadata["translate"] = tuple(translate)
+                translate_aff = Affine(translate=translate)
+                aff = translate_aff.compose(aff)
+            if "rotation" in transf:
+                rotate = transf["rotation"]
+                rotate_aff = Affine(affine_matrix=np.array(rotate))
+                aff = rotate_aff.compose(aff)
+
+        metadata["affine"] = aff
 
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
