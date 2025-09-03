@@ -5,8 +5,9 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
 import dask.array as da
+import numpy as np
 import zarr
-from vispy.color import Colormap
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from zarr import Group
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import SyncMixin
@@ -16,6 +17,23 @@ from .plate import get_first_field_path, get_first_well, get_pyramid_lazy
 # StrDict = Dict[str, Any]
 # LayerData = Union[Tuple[Any], Tuple[Any, StrDict], Tuple[Any, StrDict, str]]
 LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
+
+
+def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
+    """Helper function to match Colormap to an existing napari Colormap.
+    If the colormap matches, return the specific napari Colormap, otherwise return the
+    the original Colormap.
+    """
+    for available_cmap in AVAILABLE_COLORMAPS.values():
+        if (
+            np.array_equal(available_cmap.controls, custom_cmap.controls)
+            and np.array_equal(available_cmap.colors, custom_cmap.colors)
+            and available_cmap.interpolation == custom_cmap.interpolation
+        ):
+            custom_cmap = available_cmap
+            break
+
+    return custom_cmap
 
 
 class Spec(ABC):
@@ -98,7 +116,10 @@ class Multiscales(Spec):
                 if color is not None:
                     rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
                     # colormap is range: black -> rgb color
-                    colormaps.append(Colormap([[0, 0, 0], rgb]))
+                    cm = Colormap([[0, 0, 0], rgb])
+                    # Try to match colormap to an existing napari colormap
+                    cm = _match_colors_to_available_colormap(cm)
+                    colormaps.append(cm)
                 ch_names.append(ch.get("label", f"channel_{index}"))
                 visibles.append(ch.get("active", True))
 
