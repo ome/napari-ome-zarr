@@ -1,0 +1,334 @@
+# zarr v3
+
+from abc import ABC
+from typing import Any, Callable, Dict, Iterable, List, Tuple
+from xml.etree import ElementTree as ET
+
+import dask.array as da
+import numpy as np
+import zarr
+from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
+from zarr import Group
+from zarr.core.buffer import default_buffer_prototype
+from zarr.core.sync import SyncMixin
+
+from .plate import get_first_field_path, get_first_well, get_pyramid_lazy
+
+# StrDict = Dict[str, Any]
+# LayerData = Union[Tuple[Any], Tuple[Any, StrDict], Tuple[Any, StrDict, str]]
+LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
+
+
+def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
+    """Helper function to match Colormap to an existing napari Colormap.
+    If the colormap matches, return the specific napari Colormap, otherwise return the
+    the original Colormap.
+    """
+    for available_cmap in AVAILABLE_COLORMAPS.values():
+        if (
+            np.array_equal(available_cmap.controls, custom_cmap.controls)
+            and np.array_equal(available_cmap.colors, custom_cmap.colors)
+            and available_cmap.interpolation == custom_cmap.interpolation
+        ):
+            custom_cmap = available_cmap
+            break
+
+    return custom_cmap
+
+
+class Spec(ABC):
+    def __init__(self, group: Group) -> None:
+        self.group = group
+
+    @staticmethod
+    def matches(group: Group) -> bool:
+        return False
+
+    def data(self) -> List[da.core.Array]:
+        return []
+
+    def metadata(self) -> Dict[str, Any]:
+        # napari layer metadata
+        return {}
+
+    def children(self) -> list["Spec"]:
+        return []
+
+    def iter_nodes(self) -> Iterable["Spec"]:
+        yield self
+        for child in self.children():
+            yield from child.iter_nodes()
+
+    def iter_data(self) -> Iterable[da.core.Array]:
+        for node in self.iter_nodes():
+            data = node.data()
+            if data:
+                yield data
+
+    @staticmethod
+    def get_attrs(group: Group) -> dict:
+        if "ome" in group.attrs:
+            return group.attrs["ome"]
+        return group.attrs
+
+
+class Multiscales(Spec):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        return "multiscales" in Spec.get_attrs(group)
+
+    def children(self) -> list[Spec]:
+        ch: list[Spec] = []
+        # test for child "labels"
+        try:
+            grp = self.group["labels"]
+            attrs = Spec.get_attrs(grp)
+            if "labels" in attrs:
+                for name in attrs["labels"]:
+                    g = grp[name]
+                    if Label.matches(g):
+                        ch.append(Label(g))
+        except KeyError:
+            pass
+        return ch
+
+    def data(self) -> list[da.core.Array]:
+        attrs = Spec.get_attrs(self.group)
+        paths = [ds["path"] for ds in attrs["multiscales"][0]["datasets"]]
+        return [da.from_zarr(self.group[path]) for path in paths]
+
+    def metadata(self) -> Dict[str, Any]:
+        rsp: dict = {}
+        attrs = Spec.get_attrs(self.group)
+        axes = attrs["multiscales"][0]["axes"]
+        atypes = [axis["type"] for axis in axes]
+        if "channel" in atypes:
+            channel_axis = atypes.index("channel")
+            rsp["channel_axis"] = channel_axis
+        if "omero" in attrs:
+            colormaps = []
+            ch_names = []
+            visibles = []
+            contrast_limits: list[list[int]] = []
+            model = attrs["omero"].get("rdefs", {}).get("model", "unset")
+            greyscale = model == "greyscale"
+
+            for index, ch in enumerate(attrs["omero"]["channels"]):
+                color = ch.get("color", None)
+                if color is not None:
+                    rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
+                    if greyscale:
+                        rgb = [1, 1, 1]
+                    # colormap is range: black -> rgb color
+                    cm = Colormap([[0, 0, 0], rgb])
+                    # Try to match colormap to an existing napari colormap
+                    cm = _match_colors_to_available_colormap(cm)
+                    colormaps.append(cm)
+                ch_names.append(ch.get("label", f"channel_{index}"))
+                visibles.append(ch.get("active", True))
+
+                window = ch.get("window", None)
+                if window is not None:
+                    start = window.get("start", None)
+                    end = window.get("end", None)
+                    if start is not None and end is not None:
+                        # skip if None. Otherwise check no previous skip
+                        if len(contrast_limits) == index:
+                            contrast_limits.append([start, end])
+
+            if rsp.get("channel_axis") is not None:
+                rsp["colormap"] = colormaps
+                rsp["name"] = ch_names
+                if len(contrast_limits) > 0:
+                    rsp["contrast_limits"] = contrast_limits
+                rsp["visible"] = visibles
+            else:
+                rsp["colormap"] = colormaps[0]
+                rsp["name"] = ch_names[0]
+                if len(contrast_limits) > 0:
+                    rsp["contrast_limits"] = contrast_limits[0]
+                rsp["visible"] = visibles[0]
+
+        return rsp
+
+
+class Bioformats2raw(Spec):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        attrs = Spec.get_attrs(group)
+        # Don't consider "plate" as a Bioformats2raw layout
+        return "bioformats2raw.layout" in attrs and "plate" not in attrs
+
+    def children(self) -> list[Spec]:
+        # lookup children from series of OME/METADATA.xml
+        xml_data = SyncMixin()._sync(
+            self.group.store.get(
+                "OME/METADATA.ome.xml", prototype=default_buffer_prototype()
+            )
+        )
+        # print("xml_data", xml_data.to_bytes())
+        root = ET.fromstring(xml_data.to_bytes())
+        rv: list[Spec] = []
+        for child in root:
+            # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
+            print(child.tag)
+            node_id = child.attrib.get("ID", "")
+            if child.tag.endswith("Image") and node_id.startswith("Image:"):
+                print("Image ID", node_id)
+                image_path = node_id.replace("Image:", "")
+                g = self.group[image_path]
+                if Multiscales.matches(g):
+                    rv.append(Multiscales(g))
+        return rv
+
+    # override to NOT yield self since node has no data
+    def iter_nodes(self) -> Iterable[Spec]:
+        for child in self.children():
+            yield from child.iter_nodes()
+
+
+class Plate(Spec):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        return "plate" in Spec.get_attrs(group)
+
+    def data(self) -> list[da.core.Array]:
+        # we want to return a dask pyramid...
+        return get_pyramid_lazy(self.group)
+
+    def metadata(self) -> dict:
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        return Multiscales(image_group).metadata()
+
+    def children(self) -> list[Spec]:
+        # Plate has children If it has labels - check one Well...
+        # Child is PlateLabels
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        labels_group = image_group.get("labels", None)
+        if labels_group is not None:
+            labels_attrs = Spec.get_attrs(labels_group)
+            if "labels" in labels_attrs:
+                ch: list[Spec] = []
+                for labels_path in labels_attrs["labels"]:
+                    print("labels_path", labels_path)
+                    ch.append(PlateLabels(self.group, labels_path=labels_path))
+                return ch
+        return []
+
+
+class PlateLabels(Plate):
+    def __init__(self, group: Group, labels_path: str):
+        super().__init__(group)
+        self.labels_path = labels_path
+
+    def data(self) -> list[da.core.Array]:
+        # return a dask pyramid...
+        return get_pyramid_lazy(self.group, self.labels_path)
+
+    def children(self) -> list[Spec]:
+        # Need to override Plate.children()
+        return []
+
+    def metadata(self) -> dict:
+        # override Plate metadata (no channel-axis etc)
+        # TODO: read image-label metadata, colors etc
+        return {
+            "name": f"labels/{self.labels_path}",
+        }
+
+
+class Labels(Spec):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        return "labels" in Spec.get_attrs(group)
+
+    # override to NOT yield self since node has no data
+    def iter_nodes(self) -> Iterable[Spec]:
+        attrs = Spec.get_attrs(self.group)
+        for name in attrs["labels"]:
+            g = self.group[name]
+            if Label.matches(g):
+                yield Label(g)
+
+
+class Label(Multiscales):
+    @staticmethod
+    def matches(group: Group) -> bool:
+        # label must also be Multiscales
+        if not Multiscales.matches(group):
+            return False
+        return "image-label" in Spec.get_attrs(group)
+
+    def metadata(self) -> Dict[str, Any]:
+        # override Multiscales metadata
+        # call super
+        ms_data = super().metadata()
+        print("Label metadata", ms_data)
+        if ms_data is None:
+            ms_data = {}
+        return {
+            "name": f"labels{self.group.name}",
+            "visible": False,  # labels not visible initially
+            **ms_data,
+        }
+
+
+def read_ome_zarr(root_group: Group) -> Callable:
+    def f(*args: Any, **kwargs: Any) -> List[LayerData]:
+        results: List[LayerData] = list()
+
+        # # TODO: handle missing file
+        # root_group = zarr.open(url)
+
+        print("Root group", root_group.attrs.asdict())
+
+        spec: Spec | None = None
+
+        if Labels.matches(root_group):
+            # Try starting at parent Image
+            parent_path = root_group.store.root.parent
+            parent_group = zarr.open_group(parent_path)
+            if Multiscales.matches(parent_group):
+                spec = Multiscales(parent_group)
+            else:
+                # not sure how to handle this?
+                spec = Labels(root_group)
+        elif Label.matches(root_group):
+            # Try starting at parent Image - up 2 dirs
+            parent_path = root_group.store.root.parent.parent
+            parent_group = zarr.open_group(parent_path)
+            if Multiscales.matches(parent_group):
+                spec = Multiscales(parent_group)
+            else:
+                # not sure how to handle this?
+                spec = Label(root_group)
+        elif Bioformats2raw.matches(root_group):
+            spec = Bioformats2raw(root_group)
+        elif Multiscales.matches(root_group):
+            spec = Multiscales(root_group)
+        elif Plate.matches(root_group):
+            spec = Plate(root_group)
+        else:
+            print("No matching spec", root_group)
+
+        if spec:
+            print("spec", spec)
+            nodes = list(spec.iter_nodes())
+            print("Nodes", nodes)
+            for node in nodes:
+                node_data = node.data()
+                metadata = node.metadata()
+                layer_type = "image"
+                # print(Spec.get_attrs(node.group))
+                if Label.matches(node.group) or isinstance(node, PlateLabels):
+                    layer_type = "labels"
+                rv: LayerData = (node_data, metadata, layer_type)
+                results.append(rv)
+
+        return results
+
+    return f
