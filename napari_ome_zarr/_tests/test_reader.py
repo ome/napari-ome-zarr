@@ -175,7 +175,7 @@ class TestPlates:
         )
 
         # check plate compared with an Image
-        well_path = self.plate_path / self.well_paths[0]
+        well_path = self.plate_path / self.well_paths[0] / "0"
         img_layers = napari_get_reader(str(well_path))()
         assert len(img_layers) == 1
         img_layer = img_layers[0]

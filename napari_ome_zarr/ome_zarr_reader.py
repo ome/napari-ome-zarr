@@ -110,11 +110,15 @@ class Multiscales(Spec):
             ch_names = []
             visibles = []
             contrast_limits: list[list[int]] = []
+            model = attrs["omero"].get("rdefs", {}).get("model", "unset")
+            greyscale = model == "greyscale"
 
             for index, ch in enumerate(attrs["omero"]["channels"]):
                 color = ch.get("color", None)
                 if color is not None:
                     rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
+                    if greyscale:
+                        rgb = [1, 1, 1]
                     # colormap is range: black -> rgb color
                     cm = Colormap([[0, 0, 0], rgb])
                     # Try to match colormap to an existing napari colormap
