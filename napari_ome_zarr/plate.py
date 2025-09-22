@@ -83,7 +83,7 @@ def get_stitched_grid(
         try:
             # this is a dask array - data not loaded from source yet
             data = da.from_zarr(plate_group[img_path])
-        except ValueError:
+        except (ValueError, KeyError):
             # FIXME: check the Well to get the actual first field path
             data = da.zeros(tile_shape, dtype=numpy_type)
         return data
