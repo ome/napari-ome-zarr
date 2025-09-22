@@ -286,8 +286,31 @@ class Label(Multiscales):
             ms_data = {}
         if "channel_axis" in ms_data:
             ms_data.pop("channel_axis")
+
+        attrs = Spec.get_attrs(self.group)
+        image_label = attrs.get("image-label", {})
+        colors: dict[int | bool, list[float]] = {}
+        color_list = image_label.get("colors", [])
+        if color_list:
+            for color in color_list:
+                try:
+                    label_value = color["label-value"]
+                    rgba = color.get("rgba", None)
+                    if rgba:
+                        rgba = [x / 255 for x in rgba]
+
+                    if isinstance(label_value, (bool, int)):
+                        colors[label_value] = rgba
+                    else:
+                        raise Exception("not bool or int")
+
+                except Exception:
+                    pass
+                    # LOGGER.exception("invalid color - %s", color)
+
         return {
             "name": f"labels{self.group.name}",
+            "colormap": colors,
             "visible": False,  # labels not visible initially
             **ms_data,
         }
