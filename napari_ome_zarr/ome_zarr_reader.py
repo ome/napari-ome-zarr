@@ -284,6 +284,8 @@ class Label(Multiscales):
         print("Label metadata", ms_data)
         if ms_data is None:
             ms_data = {}
+        if "channel_axis" in ms_data:
+            ms_data.pop("channel_axis")
         return {
             "name": f"labels{self.group.name}",
             "visible": False,  # labels not visible initially
