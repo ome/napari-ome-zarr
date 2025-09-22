@@ -101,10 +101,24 @@ class Multiscales(Spec):
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
         axes = attrs["multiscales"][0]["axes"]
+        dataset_0 = attrs["multiscales"][0]["datasets"][0]
+        channel_axis = None
         atypes = [axis["type"] for axis in axes]
         if "channel" in atypes:
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
+        if "coordinateTransformations" in dataset_0:
+            for transf in dataset_0["coordinateTransformations"]:
+                if "scale" in transf:
+                    scale = transf["scale"]
+                    if channel_axis is not None:
+                        scale.pop(channel_axis)
+                    rsp["scale"] = tuple(scale)
+                if "translation" in transf:
+                    translate = transf["translation"]
+                    if channel_axis is not None:
+                        translate.pop(channel_axis)
+                    rsp["translate"] = tuple(translate)
         if "omero" in attrs:
             colormaps = []
             ch_names = []
