@@ -308,6 +308,30 @@ class Label(Multiscales):
                     pass
                     # LOGGER.exception("invalid color - %s", color)
 
+        props_list = image_label.get("properties", [])
+        if props_list:
+            props_by_labelid: dict[int, dict[str, str]] = {}
+            for props in props_list:
+                label_val = props["label-value"]
+                props_by_labelid[label_val] = dict(props)
+                del props_by_labelid[label_val]["label-value"]
+
+            properties: Dict[str, List] = {}
+            # First, create lists for all existing keys...
+            for label_id, props_dict in props_by_labelid.items():
+                for key in props_dict.keys():
+                    properties[key] = []
+
+            keys = list(properties.keys())
+
+            properties["index"] = []
+            for label_id, props_dict in props_by_labelid.items():
+                properties["index"].append(label_id)
+                # ...in case some objects don't have all the keys
+                for key in keys:
+                    properties[key].append(props_dict.get(key, None))
+            ms_data["properties"] = properties
+
         return {
             "name": f"labels{self.group.name}",
             "colormap": colors,
