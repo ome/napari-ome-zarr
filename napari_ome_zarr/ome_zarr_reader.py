@@ -45,25 +45,37 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
 def transforms_to_affine(
     transforms: List[Dict[str, Any]], channel_axis: int | None
 ) -> Affine:
-    aff = Affine()
+    # Don't create Affine until we know dimensions...
+    aff: Affine = None
     for transf in transforms:
         print("transforms_to_affine..........ch,transf", channel_axis, transf)
         if transf["type"] == "scale":
             scale = transf["scale"]
             if channel_axis is not None:
                 scale.pop(channel_axis)
-            scale_aff = Affine(scale=scale)
-            aff = scale_aff.compose(aff)
+            if aff is None:
+                aff = Affine(scale=scale)
+            else:
+                scale_aff = Affine(scale=scale)
+                aff = scale_aff.compose(aff)
         if transf["type"] == "translation":
             translate = transf["translation"]
             if channel_axis is not None:
                 translate.pop(channel_axis)
-            translate_aff = Affine(translate=translate)
-            aff = translate_aff.compose(aff)
+            if aff is None:
+                aff = Affine(translate=translate)
+            else:
+                translate_aff = Affine(translate=translate)
+                aff = translate_aff.compose(aff)
         if transf["type"] == "rotation":
-            rotate = transf["rotation"]
-            rotate_aff = Affine(affine_matrix=np.array(rotate))
-            print("rotate_aff", rotate_aff)
+            matrix = np.array(transf["rotation"])
+            print("ROTATION matrix", matrix)
+            if channel_axis is not None:
+                # remove channel axis from 2D matrix
+                for dim in (0, 1):
+                    matrix = np.delete(matrix, channel_axis, dim)
+                print("CROPPED ROTATION matrix", matrix)
+            rotate_aff = Affine(affine_matrix=matrix)
             aff = rotate_aff.compose(aff)
     return aff
 
