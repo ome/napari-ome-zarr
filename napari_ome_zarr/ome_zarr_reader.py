@@ -1,6 +1,5 @@
 # zarr v3
 
-import os
 from abc import ABC
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
@@ -48,7 +47,7 @@ def transforms_to_affine(
 ) -> Affine:
     aff = Affine()
     for transf in transforms:
-        print("transforms_to_affine..........", transf)
+        print("transforms_to_affine..........ch,transf", channel_axis, transf)
         if transf["type"] == "scale":
             scale = transf["scale"]
             if channel_axis is not None:
@@ -72,7 +71,7 @@ def transforms_to_affine(
 class Spec(ABC):
     def __init__(self, group: Group) -> None:
         self.group = group
-        self.extra_transforms: List[Dict[str, Any]] = []
+        self.parent_transforms: List[Dict[str, Any]] = []
 
     @staticmethod
     def matches(group: Group) -> bool:
@@ -115,6 +114,7 @@ class Multiscales(Spec):
         print("Multiscales.children()", self.group.name)
         ch: list[Spec] = []
         # test for child "labels"
+        # we skip Labels spec -> child Label
         try:
             grp = self.group["labels"]
             attrs = Spec.get_attrs(grp)
@@ -122,7 +122,10 @@ class Multiscales(Spec):
                 for name in attrs["labels"]:
                     g = grp[name]
                     if Label.matches(g):
-                        ch.append(Label(g))
+                        label_image = Label(g)
+                        # Label inherits parent transforms
+                        label_image.parent_transforms = self.parent_transforms[:]
+                        ch.append(label_image)
         except KeyError:
             pass
         return ch
@@ -160,8 +163,8 @@ class Multiscales(Spec):
                     transforms.append(transf)
 
         print("TRANSFORMS", transforms)
-        print("EXTRA TRANSFORMS", self.extra_transforms)
-        transforms.extend(self.extra_transforms)
+        print("EXTRA TRANSFORMS", self.parent_transforms)
+        transforms.extend(self.parent_transforms)
 
         # compile all transforms into single Affine
         rsp["affine"] = transforms_to_affine(transforms, channel_axis)
@@ -264,37 +267,16 @@ class CoordinateSystems(Spec):
             g = self.group[image_path]
             print("coordinateSystems child", image_path, g)
             if Multiscales.matches(g):
-                rv.append(Multiscales(g))
+                ms_image = Multiscales(g)
+                # child image gets the parent transform
+                ms_image.parent_transforms.append(transf)
+                rv.append(ms_image)
         return rv
 
     # override to NOT yield self since node has no data
     def iter_nodes(self) -> Iterable[Spec]:
-
-        def node_generator() -> Iterable[Spec]:
-            # print("CoordinateSystems.iter_nodes", self.group.name)
-            for child in self.children():
-                yield from child.iter_nodes()
-
-        # FIXME: currently we only handle ONE transform per 'input' image path
-        transforms_by_input: Dict[str, Dict[str, Any]] = {}
-        transfs = self.get_attrs(self.group).get("coordinateTransformations", [])
-        for transf in transfs:
-            image_path = transf.get("input")
-            transforms_by_input[image_path] = transf
-        print("transforms_by_input", transforms_by_input)
-
-        # Need to force evaluation here to get Labels under Multiscales...
-        ch_nodes = list(node_generator())
-
-        for n in ch_nodes:
-            pth = os.path.basename(n.group.name)  # remove leading /
-            print("PATH", pth, pth in transforms_by_input)
-            # NB: this doesn't handle child Labels
-            if pth in transforms_by_input:
-                transf = transforms_by_input[pth]
-                print("CoordinateSystems child node transf", transf)
-                n.extra_transforms.append(transf)
-        return ch_nodes
+        for child in self.children():
+            yield from child.iter_nodes()
 
 
 class Plate(Spec):
