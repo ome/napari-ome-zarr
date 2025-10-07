@@ -274,8 +274,15 @@ class CoordinateSystems(Spec):
         # lookup children from coordinateTransformations 'input' paths
         rv: list[Spec] = []
         transfs = self.get_attrs(self.group).get("coordinateTransformations", [])
+        output = None
         for transf in transfs:
             image_path = transf.get("input")
+            out = transf.get("output")
+            if output is None:
+                output = out
+            elif output != out:
+                print("WARNING: multiple different outputs in CoordinateSystems")
+                continue
             g = self.group[image_path]
             print("coordinateSystems child", image_path, g)
             if Multiscales.matches(g):
@@ -283,6 +290,12 @@ class CoordinateSystems(Spec):
                 # child image gets the parent transform
                 ms_image.parent_transforms.append(transf)
                 rv.append(ms_image)
+
+        # check if 'output' is path to image...
+        g = self.group[output]
+        if Multiscales.matches(g):
+            # Add to start (layer behind other tiles)
+            rv.insert(0, Multiscales(g))
         return rv
 
     # override to NOT yield self since node has no data
