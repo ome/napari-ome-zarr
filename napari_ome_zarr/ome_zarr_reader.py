@@ -45,9 +45,17 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
 def transforms_to_affine(
     transforms: List[Dict[str, Any]], channel_axis: int | None
 ) -> Affine:
+    # first unwrap and flatten any 'sequence' transforms...
+    flat_transforms: List[Dict[str, Any]] = []
+    for transf in transforms:
+        if transf["type"] == "sequence":
+            flat_transforms.extend(transf["transformations"])
+        else:
+            flat_transforms.append(transf)
+
     # Don't create Affine until we know dimensions...
     aff: Affine = None
-    for transf in transforms:
+    for transf in flat_transforms:
         print("transforms_to_affine..........ch,transf", channel_axis, transf)
         if transf["type"] == "scale":
             scale = transf["scale"]
@@ -124,6 +132,8 @@ class Multiscales(Spec):
 
     def children(self) -> list[Spec]:
         print("Multiscales.children()", self.group.name)
+        # Ignore Labels spec for now
+        # return []
         ch: list[Spec] = []
         # test for child "labels"
         # we skip Labels spec -> child Label
@@ -159,21 +169,14 @@ class Multiscales(Spec):
             rsp["channel_axis"] = channel_axis
 
         transforms = []
+
+        # First we handle transforms from datasets[0]...
         if "coordinateTransformations" in dataset_0:
-            for transf in dataset_0["coordinateTransformations"]:
-                if transf["type"] == "sequence":
-                    transforms.extend(transf["transformations"])
-                else:
-                    transforms.append(transf)
-        # check for coordinateTransformations at top level
+            transforms.extend(dataset_0["coordinateTransformations"])
+        # Then check for coordinateTransformations at top level
         if "coordinateTransformations" in attrs["multiscales"][0]:
             print("ROTATION????", attrs["multiscales"][0]["coordinateTransformations"])
-            for transf in attrs["multiscales"][0]["coordinateTransformations"]:
-                if transf["type"] == "sequence":
-                    transforms.extend(transf["transformations"])
-                else:
-                    transforms.append(transf)
-
+            transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
         print("TRANSFORMS", transforms)
         print("EXTRA TRANSFORMS", self.parent_transforms)
         transforms.extend(self.parent_transforms)
@@ -281,7 +284,7 @@ class CoordinateSystems(Spec):
             if output is None:
                 output = out
             elif output != out:
-                print("WARNING: multiple different outputs in CoordinateSystems")
+                print(f"WARNING: '{out}' output different from previous '{output}'")
                 continue
             g = self.group[image_path]
             print("coordinateSystems child", image_path, g)
@@ -292,10 +295,13 @@ class CoordinateSystems(Spec):
                 rv.append(ms_image)
 
         # check if 'output' is path to image...
-        g = self.group[output]
-        if Multiscales.matches(g):
-            # Add to start (layer behind other tiles)
-            rv.insert(0, Multiscales(g))
+        try:
+            g = self.group[output]
+            if Multiscales.matches(g):
+                # Add to start (layer behind other tiles)
+                rv.insert(0, Multiscales(g))
+        except KeyError:
+            pass
         return rv
 
     # override to NOT yield self since node has no data
