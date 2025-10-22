@@ -37,15 +37,11 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     return custom_cmap
 
 
-# QA ignore next line (WPS442 Found commented out code)
-# no QA: WPS442
-# viewer.open("/Users/wmoore/Desktop/ZARR/data/omero-cli-zarr/v0.5/RFC5/F_46.ome.tiff.ome.zarr",plugin="napari-ome-zarr")
-
-
 def transforms_to_affine(
     transforms: List[Dict[str, Any]], channel_axis: int | None
 ) -> Affine:
     # first unwrap and flatten any 'sequence' transforms...
+    # NB: if any 'sequence' contains another 'sequence' this is ignored.
     flat_transforms: List[Dict[str, Any]] = []
     for transf in transforms:
         if transf["type"] == "sequence":
@@ -83,8 +79,33 @@ def transforms_to_affine(
                 for dim in (0, 1):
                     matrix = np.delete(matrix, channel_axis, dim)
                 print("CROPPED ROTATION matrix", matrix)
+            # Spec says that rotation matrix is 1 row and column smaller than affine
+            matrix = np.pad(
+                matrix,
+                pad_width=((0, 1), (0, 1)),
+                mode="constant",
+                constant_values=0,
+            )
+            matrix[-1, -1] = 1
+            print("PADDED ROTATION matrix", matrix)
             rotate_aff = Affine(affine_matrix=matrix)
             aff = rotate_aff.compose(aff)
+        if transf["type"] == "affine":
+            matrix = np.array(transf["affine"])
+            if channel_axis is not None:
+                # remove channel axis from 2D matrix
+                for dim in (0, 1):
+                    matrix = np.delete(matrix, channel_axis, dim)
+            # Spec says that rotation matrix is 1 row smaller than affine
+            matrix = np.pad(
+                matrix,
+                pad_width=((0, 1), (0, 0)),
+                mode="constant",
+                constant_values=0,
+            )
+            matrix[-1, -1] = 1
+            print("PADDED AFFINE matrix", matrix)
+            aff = Affine(affine_matrix=matrix).compose(aff)
     return aff
 
 
@@ -131,12 +152,8 @@ class Multiscales(Spec):
         return "multiscales" in Spec.get_attrs(group)
 
     def children(self) -> list[Spec]:
-        print("Multiscales.children()", self.group.name)
-        # Ignore Labels spec for now
-        # return []
         ch: list[Spec] = []
         # test for child "labels"
-        # we skip Labels spec -> child Label
         try:
             grp = self.group["labels"]
             attrs = Spec.get_attrs(grp)
@@ -175,10 +192,8 @@ class Multiscales(Spec):
             transforms.extend(dataset_0["coordinateTransformations"])
         # Then check for coordinateTransformations at top level
         if "coordinateTransformations" in attrs["multiscales"][0]:
-            print("ROTATION????", attrs["multiscales"][0]["coordinateTransformations"])
             transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
-        print("TRANSFORMS", transforms)
-        print("EXTRA TRANSFORMS", self.parent_transforms)
+        # Finally add any parent transforms (e.g. from CoordinateSystems)
         transforms.extend(self.parent_transforms)
 
         # compile all transforms into single Affine
