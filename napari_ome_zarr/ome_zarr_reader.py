@@ -37,6 +37,68 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     return custom_cmap
 
 
+def remove_axis_from_transform(transform: Dict[str, Any], axis: int) -> Dict[str, Any]:
+    """Remove a specific axis from an OME-Zarr transform dict."""
+    new_transform = transform.copy()
+    if transform["type"] == "scale":
+        new_scale = transform["scale"][:]
+        del new_scale[axis]
+        new_transform["scale"] = new_scale
+    if transform["type"] == "translation":
+        new_translation = transform["translation"][:]
+        del new_translation[axis]
+        new_transform["translation"] = new_translation
+    if transform["type"] == "rotation":
+        matrix = np.array(transform["rotation"])
+        matrix = np.delete(matrix, axis, 0)  # remove row
+        matrix = np.delete(matrix, axis, 1)  # remove column
+        new_transform["rotation"] = matrix.tolist()
+    if transform["type"] == "affine":
+        matrix = np.array(transform["affine"])
+        matrix = np.delete(matrix, axis, 0)  # remove row
+        matrix = np.delete(matrix, axis, 1)  # remove column
+        new_transform["affine"] = matrix.tolist()
+    if transform["type"] == "sequence":
+        new_transforms = []
+        for sub_transform in transform["transformations"]:
+            new_sub_transform = remove_axis_from_transform(sub_transform, axis)
+            new_transforms.append(new_sub_transform)
+        new_transform["transformations"] = new_transforms
+    return new_transform
+
+
+def transform_to_affine(transform: Dict[str, Any]) -> Affine:
+    """Convert a single OME-Zarr transform dict to an Affine object."""
+    aff: Affine = None
+    if transform["type"] == "scale":
+        aff = Affine(scale=transform["scale"])
+    if transform["type"] == "translation":
+        aff = Affine(translate=transform["translation"])
+    if transform["type"] == "rotation":
+        matrix = np.array(transform["rotation"])
+        # Spec says that rotation matrix is 1 row and column smaller than affine
+        matrix = np.pad(
+            matrix,
+            pad_width=((0, 1), (0, 1)),
+            mode="constant",
+            constant_values=0,
+        )
+        matrix[-1, -1] = 1
+        aff = Affine(affine_matrix=matrix)
+    if transform["type"] == "affine":
+        matrix = np.array(transform["affine"])
+        # Spec says that rotation matrix is 1 row smaller than affine
+        matrix = np.pad(
+            matrix,
+            pad_width=((0, 1), (0, 0)),
+            mode="constant",
+            constant_values=0,
+        )
+        matrix[-1, -1] = 1
+        aff = Affine(affine_matrix=matrix)
+    return aff
+
+
 def transforms_to_affine(
     transforms: List[Dict[str, Any]], channel_axis: int | None
 ) -> Affine:
@@ -53,59 +115,17 @@ def transforms_to_affine(
     aff: Affine = None
     for transf in flat_transforms:
         print("transforms_to_affine..........ch,transf", channel_axis, transf)
-        if transf["type"] == "scale":
-            scale = transf["scale"]
-            if channel_axis is not None:
-                scale.pop(channel_axis)
-            if aff is None:
-                aff = Affine(scale=scale)
-            else:
-                scale_aff = Affine(scale=scale)
-                aff = scale_aff.compose(aff)
-        if transf["type"] == "translation":
-            translate = transf["translation"]
-            if channel_axis is not None:
-                translate.pop(channel_axis)
-            if aff is None:
-                aff = Affine(translate=translate)
-            else:
-                translate_aff = Affine(translate=translate)
-                aff = translate_aff.compose(aff)
-        if transf["type"] == "rotation":
-            matrix = np.array(transf["rotation"])
-            print("ROTATION matrix", matrix)
-            if channel_axis is not None:
-                # remove channel axis from 2D matrix
-                for dim in (0, 1):
-                    matrix = np.delete(matrix, channel_axis, dim)
-                print("CROPPED ROTATION matrix", matrix)
-            # Spec says that rotation matrix is 1 row and column smaller than affine
-            matrix = np.pad(
-                matrix,
-                pad_width=((0, 1), (0, 1)),
-                mode="constant",
-                constant_values=0,
-            )
-            matrix[-1, -1] = 1
-            print("PADDED ROTATION matrix", matrix)
-            rotate_aff = Affine(affine_matrix=matrix)
-            aff = rotate_aff.compose(aff)
-        if transf["type"] == "affine":
-            matrix = np.array(transf["affine"])
-            if channel_axis is not None:
-                # remove channel axis from 2D matrix
-                for dim in (0, 1):
-                    matrix = np.delete(matrix, channel_axis, dim)
-            # Spec says that rotation matrix is 1 row smaller than affine
-            matrix = np.pad(
-                matrix,
-                pad_width=((0, 1), (0, 0)),
-                mode="constant",
-                constant_values=0,
-            )
-            matrix[-1, -1] = 1
-            print("PADDED AFFINE matrix", matrix)
-            aff = Affine(affine_matrix=matrix).compose(aff)
+        trans_aff = transform_to_affine(transf)
+        if aff is None:
+            aff = trans_aff
+        else:
+            aff = trans_aff.compose(aff)
+    # finally, remove channel axis from 2D matrix
+    if channel_axis is not None:
+        matrix = aff.affine_matrix
+        for dim in (0, 1):
+            matrix = np.delete(matrix, channel_axis, dim)
+        aff = Affine(affine_matrix=matrix)
     return aff
 
 
@@ -163,7 +183,9 @@ class Multiscales(Spec):
                     if Label.matches(g):
                         label_image = Label(g)
                         # Label inherits parent transforms
-                        label_image.parent_transforms = self.parent_transforms[:]
+                        ch_axis = self.metadata().get("channel_axis", None)
+                        for transf in self.parent_transforms:
+                            label_image.add_parent_transform(transf, ch_axis)
                         ch.append(label_image)
         except KeyError:
             pass
@@ -177,7 +199,11 @@ class Multiscales(Spec):
     def metadata(self) -> Dict[str, Any]:
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
-        axes = attrs["multiscales"][0]["axes"]
+        # TODO: handle v0.6 AND v0.5 and earlier...
+        if "axes" in attrs["multiscales"][0]:
+            axes = attrs["multiscales"][0]["axes"]
+        else:
+            axes = attrs["multiscales"][0]["coordinateSystems"][0]["axes"]
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         channel_axis = None
         atypes = [axis["type"] for axis in axes]
@@ -197,6 +223,7 @@ class Multiscales(Spec):
         transforms.extend(self.parent_transforms)
 
         # compile all transforms into single Affine
+        print("\nALL transforms:", transforms)
         rsp["affine"] = transforms_to_affine(transforms, channel_axis)
 
         if "omero" in attrs:
@@ -400,6 +427,21 @@ class Label(Multiscales):
         if not Multiscales.matches(group):
             return False
         return "image-label" in Spec.get_attrs(group)
+
+    def add_parent_transform(
+        self, transform: Dict[str, Any], parent_channel_axis: int | None
+    ) -> None:
+        # Add the parent transform to the current transform. If
+        # parent_channel_axis is not in Label, we need to remove that axis
+        # from the transform.
+        label_channel_axis = self.metadata().get("channel_axis", None)
+        if (
+            parent_channel_axis is not None
+            and parent_channel_axis != label_channel_axis
+        ):
+            print("remove axis from transform", parent_channel_axis)
+            transform = remove_axis_from_transform(transform, parent_channel_axis)
+        self.parent_transforms.append(transform)
 
     def metadata(self) -> Dict[str, Any]:
         # override Multiscales metadata
