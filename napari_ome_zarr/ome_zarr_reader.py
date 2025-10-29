@@ -196,15 +196,12 @@ class Bioformats2raw(Spec):
                 "OME/METADATA.ome.xml", prototype=default_buffer_prototype()
             )
         )
-        # print("xml_data", xml_data.to_bytes())
         root = ET.fromstring(xml_data.to_bytes())
         rv: list[Spec] = []
         for child in root:
             # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
-            print(child.tag)
             node_id = child.attrib.get("ID", "")
             if child.tag.endswith("Image") and node_id.startswith("Image:"):
-                print("Image ID", node_id)
                 image_path = node_id.replace("Image:", "")
                 g = self.group[image_path]
                 if Multiscales.matches(g):
@@ -244,7 +241,6 @@ class Plate(Spec):
             if "labels" in labels_attrs:
                 ch: list[Spec] = []
                 for labels_path in labels_attrs["labels"]:
-                    print("labels_path", labels_path)
                     ch.append(PlateLabels(self.group, labels_path=labels_path))
                 return ch
         return []
@@ -297,7 +293,6 @@ class Label(Multiscales):
         # override Multiscales metadata
         # call super
         ms_data = super().metadata()
-        print("Label metadata", ms_data)
         if ms_data is None:
             ms_data = {}
         if "channel_axis" in ms_data:
@@ -360,9 +355,6 @@ def read_ome_zarr(root_group: Group) -> Callable:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
 
-        # # TODO: handle missing file
-        # root_group = zarr.open(url)
-
         print("Root group", root_group.attrs.asdict())
 
         spec: Spec | None = None
@@ -395,14 +387,11 @@ def read_ome_zarr(root_group: Group) -> Callable:
             print("No matching spec", root_group)
 
         if spec:
-            print("spec", spec)
             nodes = list(spec.iter_nodes())
-            print("Nodes", nodes)
             for node in nodes:
                 node_data = node.data()
                 metadata = node.metadata()
                 layer_type = "image"
-                # print(Spec.get_attrs(node.group))
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     layer_type = "labels"
                 rv: LayerData = (node_data, metadata, layer_type)
