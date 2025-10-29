@@ -261,10 +261,12 @@ class PlateLabels(Plate):
 
     def metadata(self) -> dict:
         # override Plate metadata (no channel-axis etc)
-        # TODO: read image-label metadata, colors etc
-        return {
-            "name": f"labels/{self.labels_path}",
-        }
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        labelimage_group = image_group["labels"][self.labels_path]
+        m = Label(labelimage_group).metadata()
+        return {"scale": m.get("scale", None)}
 
 
 class Labels(Spec):
@@ -343,12 +345,16 @@ class Label(Multiscales):
                     properties[key].append(props_dict.get(key, None))
             ms_data["properties"] = properties
 
-        return {
+        rsp = {
             "name": f"labels{self.group.name}",
-            "colormap": colors,
             "visible": False,  # labels not visible initially
             **ms_data,
         }
+        # in case no colors, don't set colormap (no labels will be shown)
+        if len(colors) > 0:
+            rsp["colormap"] = colors
+
+        return rsp
 
 
 def read_ome_zarr(root_group: Group) -> Callable:
@@ -391,6 +397,7 @@ def read_ome_zarr(root_group: Group) -> Callable:
             for node in nodes:
                 node_data = node.data()
                 metadata = node.metadata()
+                print("Node:", node.group.name, "metadata:", metadata)
                 layer_type = "image"
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     layer_type = "labels"
