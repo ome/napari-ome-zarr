@@ -18,6 +18,15 @@ from .plate import get_first_field_path, get_first_well, get_pyramid_lazy
 # LayerData = Union[Tuple[Any], Tuple[Any, StrDict], Tuple[Any, StrDict, str]]
 LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
 
+AXES_TYPES = {"x": "space", "y": "space", "z": "space", "c": "channel", "t": "time"}
+AXES_5D = [
+    {"name": "t", "type": "time"},
+    {"name": "c", "type": "channel"},
+    {"name": "z", "type": "space"},
+    {"name": "y", "type": "space"},
+    {"name": "x", "type": "space"},
+]
+
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     """Helper function to match Colormap to an existing napari Colormap.
@@ -100,10 +109,17 @@ class Multiscales(Spec):
     def metadata(self) -> Dict[str, Any]:
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
-        axes = attrs["multiscales"][0]["axes"]
+        # No axes (v0.1, v0.2), assume 5D (t,c,z,y,x)
+        axes = attrs["multiscales"][0].get("axes", AXES_5D)
+        atypes = []
+        for axis in axes:
+            if isinstance(axis, str):
+                # v0.3
+                atypes.append(AXES_TYPES.get(axis.lower(), "space"))
+            else:
+                atypes.append(axis.get("type", "space"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         channel_axis = None
-        atypes = [axis["type"] for axis in axes]
         if "channel" in atypes:
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
