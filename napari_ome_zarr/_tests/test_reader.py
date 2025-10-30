@@ -96,9 +96,9 @@ class TestNapari:
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_image(self, path):
-        pth_to_image = str(getattr(self, path))
-        print(f"test_image {pth_to_image}")
-        layers = napari_get_reader(pth_to_image)()
+        path_to_image = str(getattr(self, path))
+        print(f"test_image {path_to_image}")
+        layers = napari_get_reader(path_to_image)()
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
