@@ -118,7 +118,7 @@ def transforms_to_affine(
         trans_aff = transform_to_affine(transf)
         if aff is None:
             aff = trans_aff
-        else:
+        elif trans_aff is not None:
             aff = trans_aff.compose(aff)
     # finally, remove channel axis from 2D matrix
     if channel_axis is not None:
