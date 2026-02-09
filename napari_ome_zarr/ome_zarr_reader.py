@@ -219,7 +219,7 @@ class Multiscales(Spec):
         # Then check for coordinateTransformations at top level
         if "coordinateTransformations" in attrs["multiscales"][0]:
             transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
-        # Finally add any parent transforms (e.g. from CoordinateSystems)
+        # Finally add any parent transforms (e.g. from Scene)
         transforms.extend(self.parent_transforms)
 
         # compile all transforms into single Affine
@@ -308,40 +308,56 @@ class Bioformats2raw(Spec):
             yield from child.iter_nodes()
 
 
-class CoordinateSystems(Spec):
+def path_name(in_out: dict) -> str:
+    # helper to get path from 'input' or 'output' dict
+    paths = []
+    if "path" in in_out:
+        paths.append(in_out["path"])
+    if "name" in in_out:
+        paths.append(in_out["name"])
+    return "/".join(paths)
+
+
+class Scene(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
         attrs = Spec.get_attrs(group)
-        print("CoordinateSystems.matches", attrs)
-        return "coordinateTransformations" in attrs
+        print("Scene.matches", attrs)
+        return "scene" in attrs
 
     def children(self) -> list[Spec]:
         # lookup children from coordinateTransformations 'input' paths
         rv: list[Spec] = []
-        transfs = self.get_attrs(self.group).get("coordinateTransformations", [])
+        scene_attrs = Spec.get_attrs(self.group).get("scene", {})
+        transfs = scene_attrs.get("coordinateTransformations", [])
         output = None
         for transf in transfs:
-            image_path = transf.get("input")
+            image_path = transf.get("input").get("path", None)
             out = transf.get("output")
             if output is None:
                 output = out
-            elif output != out:
-                print(f"WARNING: '{out}' output different from previous '{output}'")
+            elif path_name(output) != path_name(out):
+                print(
+                    f"WARNING: '{path_name(out)}' output different"
+                    f"from previous '{path_name(output)}'"
+                )
                 continue
             g = self.group[image_path]
-            print("coordinateSystems child", image_path, g)
+            print("scene child", image_path, g)
             if Multiscales.matches(g):
                 ms_image = Multiscales(g)
                 # child image gets the parent transform
+                # TODO: use the input 'name' to specify which coordinateSystem to use
                 ms_image.parent_transforms.append(transf)
                 rv.append(ms_image)
 
         # check if 'output' is path to image...
         try:
-            g = self.group[output]
-            if Multiscales.matches(g):
-                # Add to start (layer behind other tiles)
-                rv.insert(0, Multiscales(g))
+            if output is not None:
+                g = self.group[output.get("path", "")]
+                if Multiscales.matches(g):
+                    # Add to start (layer behind other tiles)
+                    rv.insert(0, Multiscales(g))
         except KeyError:
             pass
         return rv
@@ -541,9 +557,9 @@ def read_ome_zarr(root_group: Group) -> Callable:
             spec = Multiscales(root_group)
         elif Plate.matches(root_group):
             spec = Plate(root_group)
-        elif CoordinateSystems.matches(root_group):
-            print("CoordinateSystems")
-            spec = CoordinateSystems(root_group)
+        elif Scene.matches(root_group):
+            print("Scene")
+            spec = Scene(root_group)
         else:
             print("No matching spec", root_group)
 
