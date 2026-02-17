@@ -1,6 +1,7 @@
 # zarr v3
 
 from abc import ABC
+from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
@@ -114,7 +115,7 @@ def transforms_to_affine(
     # Don't create Affine until we know dimensions...
     aff: Affine = None
     for transf in flat_transforms:
-        print("transforms_to_affine..........ch,transf", channel_axis, transf)
+        # print("transforms_to_affine..........ch,transf", channel_axis, transf)
         trans_aff = transform_to_affine(transf)
         if aff is None:
             aff = trans_aff
@@ -213,14 +214,16 @@ class Multiscales(Spec):
 
         transforms = []
 
-        # First we handle transforms from datasets[0]...
-        if "coordinateTransformations" in dataset_0:
-            transforms.extend(dataset_0["coordinateTransformations"])
-        # Then check for coordinateTransformations at top level
-        if "coordinateTransformations" in attrs["multiscales"][0]:
-            transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
-        # Finally add any parent transforms (e.g. from Scene)
-        transforms.extend(self.parent_transforms)
+        # if we have "graph" of transforms from scene...
+        if len(self.parent_transforms) > 0:
+            transforms.extend(self.parent_transforms)
+        else:
+            # First we handle transforms from datasets[0]...
+            if "coordinateTransformations" in dataset_0:
+                transforms.extend(dataset_0["coordinateTransformations"])
+            # Then check for coordinateTransformations at top level
+            if "coordinateTransformations" in attrs["multiscales"][0]:
+                transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
 
         # compile all transforms into single Affine
         print("\nALL transforms:", transforms)
@@ -308,8 +311,10 @@ class Bioformats2raw(Spec):
             yield from child.iter_nodes()
 
 
-def path_name(in_out: dict) -> str:
+def path_name(in_out: dict | str) -> str:
     # helper to get path from 'input' or 'output' dict
+    if isinstance(in_out, str):
+        return in_out
     paths = []
     if "path" in in_out:
         paths.append(in_out["path"])
@@ -332,6 +337,8 @@ class Scene(Spec):
         transfs = scene_attrs.get("coordinateTransformations", [])
         output = None
         for transf in transfs:
+            # TODO: input may NOT have "path"
+            # TODO: input "name" is ignored!
             image_path = transf.get("input").get("path", None)
             out = transf.get("output")
             if output is None:
@@ -364,8 +371,113 @@ class Scene(Spec):
 
     # override to NOT yield self since node has no data
     def iter_nodes(self) -> Iterable[Spec]:
-        for child in self.children():
-            yield from child.iter_nodes()
+
+        # transforms key is each transform output "path.zarr/name"
+        # (where name is name of coordinateSystem)
+        transforms = defaultdict(list)  # type: Dict[str, List[Dict[str, Any]]]
+        # track unique coordinateSystems by "path.zarr/name"
+        # systems = set()
+
+        # FIRST, go through all transforms in this scene,
+        # AND any child transforms we find at 'input' or 'output' paths...
+        scene_attrs = Spec.get_attrs(self.group).get("scene", {})
+        image_attrs = {}
+        for transf in scene_attrs.get("coordinateTransformations", []):
+            output = transf["output"]
+            transf["input_full_path"] = path_name(transf["input"])
+            transforms[path_name(output)].append(transf)
+            # traverse to input/output coordinateSystem paths...
+            for io in ("input", "output"):
+                image_path = transf[io].get("path", None)
+                if image_path is not None and image_path not in image_attrs:
+                    image_attrs[image_path] = Spec.get_attrs(self.group[image_path])
+                    # need to add child transforms to our graph
+                    for ms in image_attrs[image_path].get("multiscales", []):
+                        for child_transf in ms.get("coordinateTransformations", []):
+                            # TODO: assert output doesn't have 'path'?
+                            out_name = path_name(child_transf["output"])
+                            out_path_name = image_path + "/" + out_name
+                            input_path_name = (
+                                image_path + "/" + path_name(child_transf["input"])
+                            )
+                            child_transf["input_full_path"] = input_path_name
+                            transforms[out_path_name].append(child_transf)
+                        # and the datasets... - find 'output' (just use first one)
+                        for ds in ms.get("datasets", [])[:1]:
+                            # only expect single transform...
+                            for ds_transf in ds.get("coordinateTransformations", []):
+                                out_name = path_name(ds_transf["output"])
+                                out_path_name = image_path + "/" + out_name
+                                # don't expect this to be used. e.g. image.zarr/s0
+                                input_path_name = (
+                                    image_path + "/" + path_name(ds_transf["input"])
+                                )
+                                ds_transf["input_full_path"] = input_path_name
+                                transforms[out_path_name].append(ds_transf)
+                                # Use this to create the Multiscales object below...
+                                ds_transf["multiscale_path"] = image_path
+
+        # print("Scene.iter_nodes...transforms")
+        # for key, transfs in transforms.items():
+        #     print(f"  {key}: ", [t["input_full_path"] for t in transfs])
+        #   translated_x_and_y:  ['4995115_full.zarr/physical', 'translated_x50']
+        #   4995115_full.zarr/physical:  ['4995115_full.zarr/s0']
+        #   translated_x50:  ['rot10.zarr/rotated', 'rot45.zarr/rotated']
+        #   rot10.zarr/rotated:  ['rot10.zarr/physical']
+        #   rot10.zarr/physical:  ['rot10.zarr/s0']
+        #   rot45.zarr/rotated:  ['rot45.zarr/physical']
+        #   rot45.zarr/physical:  ['rot45.zarr/s0']
+
+        # find the unique coordinateSystems (outputs)
+        outputs = set(transforms.keys())
+
+        # remove any output that is also an input (i.e. intermediate node in graph)
+        for transf_list in transforms.values():
+            outputs -= {t["input_full_path"] for t in transf_list}
+
+        print("Scene.iter_nodes...final outputs ----->", outputs)
+
+        assert len(outputs) == 1, "Multiple output coordinateSystems not supported"
+
+        # now we can iterate through the graph starting at the unique output
+        # coordinateSystem, and yield any nodes we find along the way...
+        def iter_graph(
+            path_name: str, parent_trans: list[Dict[str, Any]]
+        ) -> Iterable[list[Dict[str, Any]]]:
+            # find transforms that output to this node
+            node_transfs = transforms.get(path_name)
+            # print("iter_graph", path_name, parent_trans)
+
+            if node_transfs is None:
+                yield parent_trans
+            # find the group for this node
+            else:
+                for transf in node_transfs:
+                    parents_copy = parent_trans[:]
+                    parents_copy.append(transf)
+                    yield from iter_graph(transf["input_full_path"], parents_copy)
+
+        output = outputs.pop()
+        inputs = list(iter_graph(output, []))
+
+        print("IMAGES")
+
+        # Ignore any transform lists that don't lead to a multiscale image...
+        multiscale_inputs = [inp for inp in inputs if "multiscale_path" in inp[-1]]
+
+        for trans_list in multiscale_inputs:
+            print("---------------------")
+            print(trans_list[-1]["multiscale_path"])
+            # the last transform should have "multiscale_path" key...
+            ms_image = Multiscales(self.group[trans_list[-1]["multiscale_path"]])
+
+            # reverse, so we START at datasets -> coordinateSystem -> scene
+            trans_list.reverse()
+            ms_image.parent_transforms = trans_list
+            yield ms_image
+
+        # for child in self.children():
+        #     yield from child.iter_nodes()
 
 
 class Plate(Spec):
