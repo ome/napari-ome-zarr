@@ -1,6 +1,6 @@
 [project]
 name = "napari-ome-zarr"
-description = "A reader for zarr backed OME-NGFF images."
+description = "A reader for zarr backed OME-Zarr images."
 dynamic = ["version"]
 license = "BSD-3-Clause"
 readme = "README.md"
