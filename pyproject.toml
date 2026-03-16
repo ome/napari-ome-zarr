@@ -1,0 +1,38 @@
+[project]
+name = "napari-ome-zarr"
+description = "A reader for zarr backed OME-NGFF images."
+dynamic = ["version"]
+license = "BSD-3-Clause"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    {name = "OME Team"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "ome-zarr>=0.13.0",
+    "napari>=0.4.0",
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/ome/napari-ome-zarr/issues"
+"Documentation" = "https://github.com/ome/napari-ome-zarr#README.md"
+"Source Code" = "https://github.com/ome/napari-ome-zarr"
+"User Support" = "https://github.com/ome/napari-ome-zarr/issues"
+"bsky" = "https://bsky.app/profile/openmicroscopy.org"
+
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=9.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "napari_ome_zarr/_version.py"
