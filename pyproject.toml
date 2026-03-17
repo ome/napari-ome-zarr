@@ -1,7 +1,7 @@
 [project]
 name = "napari-ome-zarr"
 description = "A reader for zarr backed OME-Zarr images."
-dynamic = ["version"]
+dynamic = ["version", "entry-points"]
 license = "BSD-3-Clause"
 readme = "README.md"
 requires-python = ">=3.11"
