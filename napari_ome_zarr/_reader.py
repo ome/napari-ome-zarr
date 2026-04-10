@@ -25,7 +25,7 @@ napari_version = tuple(map(int, list(version("napari").split(".")[:2])))
 def napari_get_reader(path: PathLike) -> Optional[ReaderFunction]:
     """Returns a reader for supported paths that include IDR ID.
 
-    - URL of the form: https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
+    - URL of the form: https://livingobjects.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
     """
     if isinstance(path, list):
         if len(path) > 1:
