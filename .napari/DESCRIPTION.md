@@ -23,7 +23,7 @@ The image metadata from OMERO will be used to set channel names, colormaps and r
 You can open local or remote images using `napari` at the terminal and the path to your file:
 
 ```
-$ napari 'https://livingobjects.ebi.ac.uk/idr/zarr/v0.1/6001240.zarr/'
+$ napari 'https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0062A/6001240.zarr'
 
 # also works with local files
 $ napari 6001240.zarr
