@@ -78,6 +78,37 @@ def transform_properties(
     return properties
 
 
+def _extract_axis_labels(
+    axes: Optional[List[Any]], channel_axis: Optional[int]
+) -> Optional[tuple[str, ...]]:
+    """Return per-axis names from NGFF ``axes`` metadata.
+
+    Accepts ``axes`` as a list of dicts (NGFF v0.4+) or a list of
+    plain strings (v0.3). The returned tuple contains one string per
+    axis with the channel entry removed when ``channel_axis`` is set.
+    Returns ``None`` if ``axes`` is missing/empty, any entry lacks a
+    non-empty string name, or ``channel_axis`` is out of range.
+    """
+    if not axes:
+        return None
+    labels: List[str] = []
+    for axis in axes:
+        if isinstance(axis, str):
+            name = axis
+        elif isinstance(axis, dict):
+            name = axis.get("name")
+        else:
+            return None
+        if not isinstance(name, str) or not name:
+            return None
+        labels.append(name)
+    if channel_axis is not None:
+        if not (0 <= channel_axis < len(labels)):
+            return None
+        labels.pop(channel_axis)
+    return tuple(labels)
+
+
 def transform_scale(
     node_metadata: Dict, metadata: Dict, channel_axis: Optional[int]
 ) -> None:
@@ -142,6 +173,12 @@ def transform(nodes: Iterator[Node]) -> Optional[ReaderFunction]:
                     raise
 
                 transform_scale(node.metadata, metadata, channel_axis)
+
+                axis_labels = _extract_axis_labels(
+                    node.metadata.get("axes"), channel_axis
+                )
+                if axis_labels is not None:
+                    metadata["axis_labels"] = axis_labels
 
                 if node.load(Label):
                     layer_type = "labels"

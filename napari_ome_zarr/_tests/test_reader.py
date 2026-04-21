@@ -9,6 +9,7 @@ from ome_zarr.data import astronaut, create_zarr
 from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
 
 from napari_ome_zarr._reader import (
+    _extract_axis_labels,
     _match_colors_to_available_colormap,
     napari_get_reader,
 )
@@ -47,9 +48,13 @@ class TestNapari:
         if path == "path_3d":
             assert image[1]["channel_axis"] == 0
             assert image[1]["name"] == ["Red", "Green", "Blue"]
+            # cyx image with c dropped; labels have no c (NGFF spec).
+            assert image[1]["axis_labels"] == ("y", "x")
+            assert label[1]["axis_labels"] == ("y", "x")
         else:
             assert "channel_axis" not in image[1]
             assert image[1]["name"] == "channel_0"
+            assert image[1]["axis_labels"] == ("y", "x")
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_get_reader_with_list(self, path):
@@ -125,6 +130,40 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     assert colormap.name == expected_name
 
 
+@pytest.mark.parametrize(
+    "axes, channel_axis, expected",
+    [
+        # NGFF v0.4+ axes: list of dicts.
+        (
+            [
+                {"name": "t", "type": "time"},
+                {"name": "y", "type": "space"},
+                {"name": "x", "type": "space"},
+            ],
+            None,
+            ("t", "y", "x"),
+        ),
+        # NGFF v0.3 axes: list of strings, with channel split.
+        (["t", "c", "y", "x"], 1, ("t", "y", "x")),
+        # Malformed entry (missing name, non-string name, …) yields None.
+        ([{"type": "time"}, {"name": "y"}, {"name": "x"}], None, None),
+        # Missing axes metadata yields None.
+        (None, None, None),
+        # channel_axis out of range yields None.
+        ([{"name": "y"}, {"name": "x"}], 5, None),
+    ],
+    ids=[
+        "ngff_v04_dicts",
+        "ngff_v03_strings_channel_split",
+        "malformed_entry",
+        "falsy_axes",
+        "channel_axis_out_of_range",
+    ],
+)
+def test_extract_axis_labels(axes, channel_axis, expected):
+    assert _extract_axis_labels(axes, channel_axis) == expected
+
+
 class TestPlates:
     @pytest.fixture(autouse=True)
     def initdir(self, tmp_path: Path):
@@ -172,6 +211,8 @@ class TestPlates:
             self.sizey * len(self.row_names),
             self.sizex * len(self.col_names),
         )
+        assert metadata["channel_axis"] == 0
+        assert metadata["axis_labels"] == ("z", "y", "x")
 
         # check plate compared with an Image
         well_path = self.plate_path / self.well_paths[0]
@@ -179,6 +220,7 @@ class TestPlates:
         assert len(img_layers) == 1
         img_layer = img_layers[0]
         img_data, img_metadata, img_layer_type = img_layer
+        assert img_metadata["axis_labels"] == ("z", "y", "x")
 
         # plate pyramid should have same number of resolutions as images
         assert len(img_data) == len(data)
