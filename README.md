@@ -36,7 +36,7 @@ Napari will use `napari-ome-zarr` plugin to open images that the plugin recognis
 The image metadata from OMERO will be used to set channel names and rendering settings
 in napari::
 
-    napari "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
+    napari "https://livingobjects.ebi.ac.uk/idr/zarr/v0.3/9836842.zarr/"
 
 
 If a dialog in napari pops up, encouraging you to choose a reader, choose ``napari-ome-zarr`` and click OK. You can stop it happening with addition of ``--plugin napari-ome-zarr`` as in the example below.
@@ -50,7 +50,7 @@ OR in python::
     import napari
 
     viewer = napari.Viewer()
-    viewer.open("https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457537.zarr", plugin="napari-ome-zarr")
+    viewer.open("https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0101A/13457537.zarr", plugin="napari-ome-zarr")
 
     napari.run()
 

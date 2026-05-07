@@ -14,7 +14,7 @@ from .ome_zarr_reader import read_ome_zarr
 def napari_get_reader(path: str | list) -> Callable | None:
     """Returns a reader for supported paths that include IDR ID.
 
-    - URL of the form: https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
+    - URL of the form: https://livingobjects.ebi.ac.uk/idr/zarr/v0.1/ID.zarr/
     """
     if isinstance(path, list):
         if len(path) > 1:
