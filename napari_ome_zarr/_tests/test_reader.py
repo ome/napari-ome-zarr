@@ -45,9 +45,15 @@ class TestNapari:
         if path == "path_3d":
             assert image[1]["channel_axis"] == 0
             assert image[1]["name"] == ["Red", "Green", "Blue"]
+            # cyx image with c dropped; labels are yx (no channel).
+            assert image[1]["axis_labels"] == ("y", "x")
+            assert label[1]["axis_labels"] == ("y", "x")
         else:
             assert "channel_axis" not in image[1]
             assert image[1]["name"] == "channel_0"
+            assert image[1]["axis_labels"] == ("y", "x")
+        # create_zarr() doesn't set per-axis units.
+        assert "units" not in image[1]
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_get_reader_with_list(self, path):
@@ -126,6 +132,27 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     assert colormap.name == expected_name
 
 
+def test_units_forwarded(tmp_path: Path):
+    """NGFF v0.4+ axes carry per-axis ``unit``; forward into napari ``units``."""
+    path = tmp_path / "with_units.zarr"
+    grp = zarr.open_group(str(path), mode="w")
+    image = np.zeros((1, 4, 8, 8), dtype=np.uint8)
+    axes = [
+        {"name": "c", "type": "channel"},
+        {"name": "z", "type": "space", "unit": "micrometer"},
+        {"name": "y", "type": "space", "unit": "micrometer"},
+        {"name": "x", "type": "space", "unit": "micrometer"},
+    ]
+    write_image(image=image, group=grp, axes=axes)
+
+    layers = napari_get_reader(str(path))()
+    assert len(layers) == 1
+    _, metadata, _ = layers[0]
+    assert metadata["channel_axis"] == 0
+    assert metadata["axis_labels"] == ("z", "y", "x")
+    assert metadata["units"] == ("micrometer", "micrometer", "micrometer")
+
+
 class TestPlates:
     @pytest.fixture(autouse=True)
     def initdir(self, tmp_path: Path):
@@ -174,6 +201,8 @@ class TestPlates:
             self.sizey * len(self.row_names),
             self.sizex * len(self.col_names),
         )
+        assert metadata["channel_axis"] == 0
+        assert metadata["axis_labels"] == ("z", "y", "x")
 
         # check plate compared with an Image
         well_path = self.plate_path / self.well_paths[0] / "0"
@@ -181,6 +210,7 @@ class TestPlates:
         assert len(img_layers) == 1
         img_layer = img_layers[0]
         img_data, img_metadata, img_layer_type = img_layer
+        assert img_metadata["axis_labels"] == ("z", "y", "x")
 
         # plate pyramid should have same number of resolutions as images
         assert len(img_data) == len(data)

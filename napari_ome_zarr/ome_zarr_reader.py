@@ -112,17 +112,29 @@ class Multiscales(Spec):
         # No axes (v0.1, v0.2), assume 5D (t,c,z,y,x)
         axes = attrs["multiscales"][0].get("axes", AXES_5D)
         atypes = []
+        anames: list[str | None] = []
+        aunits: list[str | None] = []
         for axis in axes:
             if isinstance(axis, str):
                 # v0.3
                 atypes.append(AXES_TYPES.get(axis.lower(), "space"))
+                anames.append(axis)
+                aunits.append(None)
             else:
                 atypes.append(axis.get("type", "space"))
+                anames.append(axis.get("name"))
+                aunits.append(axis.get("unit"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         channel_axis = None
         if "channel" in atypes:
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
+            anames.pop(channel_axis)
+            aunits.pop(channel_axis)
+        if all(isinstance(n, str) and n for n in anames):
+            rsp["axis_labels"] = tuple(anames)
+        if all(isinstance(u, str) and u for u in aunits):
+            rsp["units"] = tuple(aunits)
         if "coordinateTransformations" in dataset_0:
             for transf in dataset_0["coordinateTransformations"]:
                 if "scale" in transf:
@@ -266,7 +278,12 @@ class PlateLabels(Plate):
         image_group = well_group[first_field_path]
         labelimage_group = image_group["labels"][self.labels_path]
         m = Label(labelimage_group).metadata()
-        return {"scale": m.get("scale", None)}
+        rv: dict[str, Any] = {"scale": m.get("scale", None)}
+        if "axis_labels" in m:
+            rv["axis_labels"] = m["axis_labels"]
+        if "units" in m:
+            rv["units"] = m["units"]
+        return rv
 
 
 class Labels(Spec):
