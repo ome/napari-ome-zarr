@@ -8,10 +8,8 @@ from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
 from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
 
-from napari_ome_zarr._reader import (
-    _match_colors_to_available_colormap,
-    napari_get_reader,
-)
+from napari_ome_zarr._reader import napari_get_reader
+from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
 
 
 class TestNapari:
@@ -98,18 +96,21 @@ class TestNapari:
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_image(self, path):
-        layers = napari_get_reader(str(getattr(self, path)))()
+        path_to_image = str(getattr(self, path))
+        print(f"test_image {path_to_image}")
+        layers = napari_get_reader(path_to_image)()
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
         filename = str(self.path_3d / "labels")
+        print(f"test_labels {filename}")
         layers = napari_get_reader(filename)()
-        self.assert_layers(layers, False, True)
+        self.assert_layers(layers, True, False)
 
     def test_label(self):
         filename = str(self.path_3d / "labels" / "astronaut")
         layers = napari_get_reader(filename)()
-        self.assert_layers(layers, False, True)
+        self.assert_layers(layers, True, False)
 
 
 @pytest.mark.parametrize(
@@ -134,6 +135,7 @@ class TestPlates:
         create_zarr() creates an image pyramid and labels zarr directories.
         """
         self.plate_path = tmp_path / "plate.zarr"
+        print(f"Creating test plate at {self.plate_path}")
 
         self.row_names = ["A", "B"]
         self.col_names = ["1", "2", "3"]
@@ -174,7 +176,7 @@ class TestPlates:
         )
 
         # check plate compared with an Image
-        well_path = self.plate_path / self.well_paths[0]
+        well_path = self.plate_path / self.well_paths[0] / "0"
         img_layers = napari_get_reader(str(well_path))()
         assert len(img_layers) == 1
         img_layer = img_layers[0]
@@ -194,17 +196,22 @@ class TestPlates:
                         well_idx = self.well_paths.index(well_path)
                         # field is 0
                         expected_pixel_val = well_idx * 10
+                    print(
+                        "well_path", well_path, "expected_pixel_val", expected_pixel_val
+                    )
                     # check pixel at top-left of each Well
                     well_coord_y = tiley * row_idx
                     well_coord_x = tilex * col_idx
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        == expected_pixel_val
                     )
                     # check pixel in centre of each Well - same value
                     well_coord_y = tiley * row_idx + tiley // 2
                     well_coord_x = tilex * col_idx + tilex // 2
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        == expected_pixel_val
                     )
 
             tilex = math.ceil(tilex / 2)
