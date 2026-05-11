@@ -1,11 +1,6 @@
 from __future__ import annotations
 
 import magicgui
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import napari.types
-
 
 @magicgui.magic_factory(
     call_button="Import",
