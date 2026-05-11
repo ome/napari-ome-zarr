@@ -1,5 +1,6 @@
 import magicgui
 
+
 @magicgui.magic_factory(
     call_button="Import",
     ome_zarr_url={"label": "OME-ZARR URL"},
