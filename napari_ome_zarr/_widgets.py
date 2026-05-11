@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import magicgui
 
 @magicgui.magic_factory(
@@ -8,8 +6,10 @@ import magicgui
 )
 def import_from_url(ome_zarr_url: str) -> None:
     """Import an OME-Zarr from a URL."""
-    from napari_ome_zarr._reader import napari_get_reader
     from napari import current_viewer
+
+    from napari_ome_zarr._reader import napari_get_reader
+
     viewer = current_viewer()
 
     if viewer is None:
