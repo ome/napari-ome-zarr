@@ -8,7 +8,7 @@ import magicgui
 def import_from_url(ome_zarr_url: str) -> None:
     """Import an OME-Zarr from a URL."""
     from napari import current_viewer
-
+    from napari.utils.notifications import show_warning
     from napari_ome_zarr._reader import napari_get_reader
 
     viewer = current_viewer()
@@ -18,6 +18,7 @@ def import_from_url(ome_zarr_url: str) -> None:
 
     reader = napari_get_reader(ome_zarr_url)
     if reader is None:
+        show_warning(f"No reader found for {ome_zarr_url}")
         return None
 
     layer_data = reader(ome_zarr_url)
