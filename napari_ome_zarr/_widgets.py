@@ -9,6 +9,7 @@ def import_from_url(ome_zarr_url: str) -> None:
     """Import an OME-Zarr from a URL."""
     from napari import current_viewer
     from napari.utils.notifications import show_warning
+
     from napari_ome_zarr._reader import napari_get_reader
 
     viewer = current_viewer()
