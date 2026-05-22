@@ -1,7 +1,7 @@
 [project]
 name = "napari-ome-zarr"
 description = "A reader for zarr backed OME-Zarr images."
-dynamic = ["version", "entry-points"]
+dynamic = ["version"]
 license = "BSD-3-Clause"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,9 @@ dependencies = [
     "ome-zarr>=0.13.0",
     "napari>=0.4.0",
 ]
+
+[project.entry-points."napari.manifest"]
+napari-ome-zarr = "napari_ome_zarr:napari.yaml"
 
 [project.urls]
 "Bug Tracker" = "https://github.com/ome/napari-ome-zarr/issues"
