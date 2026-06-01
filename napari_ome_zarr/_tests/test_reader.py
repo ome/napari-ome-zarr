@@ -165,11 +165,12 @@ def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
     napari raised ``axis_labels must have length ndim``)."""
     path = tmp_path / "img_with_label.zarr"
     root = zarr.open_group(str(path), mode="w")
+    # spatial axes carry a unit, the channel axis does not
     axes = [
         {"name": "c", "type": "channel"},
-        {"name": "z", "type": "space"},
-        {"name": "y", "type": "space"},
-        {"name": "x", "type": "space"},
+        {"name": "z", "type": "space", "unit": "micrometer"},
+        {"name": "y", "type": "space", "unit": "micrometer"},
+        {"name": "x", "type": "space", "unit": "micrometer"},
     ]
     write_image(image=np.zeros((2, 4, 8, 8), dtype=np.uint8), group=root, axes=axes)
     write_labels(
@@ -183,12 +184,19 @@ def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
     # image: napari splits on the channel axis, so it drops to spatial axes only
     assert image[1]["channel_axis"] == 0
     assert image[1]["axis_labels"] == ("z", "y", "x")
+    assert image[1]["units"] == ("micrometer", "micrometer", "micrometer")
 
     # label: not split, so the channel axis is retained and axis_labels length
     # must equal the (4D) layer ndim
     assert "channel_axis" not in label[1]
     assert label[1]["axis_labels"] == ("c", "z", "y", "x")
     assert len(label[1]["axis_labels"]) == label[0][0].ndim
+    # units are forwarded per-axis: the unit-less channel axis stays None so the
+    # spatial units still reach napari (otherwise the whole units tuple would be
+    # dropped and the label would be unit-inconsistent with the split images,
+    # suppressing the scale bar)
+    assert label[1]["units"] == (None, "micrometer", "micrometer", "micrometer")
+    assert len(label[1]["units"]) == label[0][0].ndim
 
 
 class TestPlates:

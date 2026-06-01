@@ -144,8 +144,16 @@ class Multiscales(Spec):
             aunits.pop(channel_axis)
         if all(isinstance(n, str) and n for n in anames):
             rsp["axis_labels"] = tuple(anames)
-        if all(isinstance(u, str) and u for u in aunits):
-            rsp["units"] = tuple(aunits)
+        # Forward units per-axis, leaving axes without a unit (e.g. a retained
+        # channel axis on a label) as None rather than dropping the whole tuple.
+        # napari treats a None entry as its default (pixel); keeping the spatial
+        # units means label and split-image layers stay unit-consistent, so the
+        # scale bar still renders (napari warns "Inconsistent units across
+        # layers" and hides units when one layer lacks them).
+        if any(isinstance(u, str) and u for u in aunits):
+            rsp["units"] = tuple(
+                u if isinstance(u, str) and u else None for u in aunits
+            )
         if "coordinateTransformations" in dataset_0:
             for transf in dataset_0["coordinateTransformations"]:
                 if "scale" in transf:
