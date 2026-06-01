@@ -6,7 +6,12 @@ import pytest
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
-from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
+from ome_zarr.writer import (
+    write_image,
+    write_labels,
+    write_plate_metadata,
+    write_well_metadata,
+)
 
 from napari_ome_zarr._reader import napari_get_reader
 from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
@@ -151,6 +156,39 @@ def test_units_forwarded(tmp_path: Path):
     assert metadata["channel_axis"] == 0
     assert metadata["axis_labels"] == ("z", "y", "x")
     assert metadata["units"] == ("micrometer", "micrometer", "micrometer")
+
+
+def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
+    """A label is one un-split layer, so it must keep the channel axis in its
+    axis_labels (regression: previously the channel axis was dropped from
+    axis_labels but not from the data, so axis_labels length != layer ndim and
+    napari raised ``axis_labels must have length ndim``)."""
+    path = tmp_path / "img_with_label.zarr"
+    root = zarr.open_group(str(path), mode="w")
+    axes = [
+        {"name": "c", "type": "channel"},
+        {"name": "z", "type": "space"},
+        {"name": "y", "type": "space"},
+        {"name": "x", "type": "space"},
+    ]
+    write_image(image=np.zeros((2, 4, 8, 8), dtype=np.uint8), group=root, axes=axes)
+    write_labels(
+        labels=np.zeros((1, 4, 8, 8), dtype=np.int8), group=root, name="lbl", axes=axes
+    )
+
+    layers = napari_get_reader(str(path))()
+    image = next(layer for layer in layers if layer[2] == "image")
+    label = next(layer for layer in layers if layer[2] == "labels")
+
+    # image: napari splits on the channel axis, so it drops to spatial axes only
+    assert image[1]["channel_axis"] == 0
+    assert image[1]["axis_labels"] == ("z", "y", "x")
+
+    # label: not split, so the channel axis is retained and axis_labels length
+    # must equal the (4D) layer ndim
+    assert "channel_axis" not in label[1]
+    assert label[1]["axis_labels"] == ("c", "z", "y", "x")
+    assert len(label[1]["axis_labels"]) == label[0][0].ndim
 
 
 class TestPlates:

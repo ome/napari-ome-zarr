@@ -106,6 +106,17 @@ class Multiscales(Spec):
         paths = [ds["path"] for ds in attrs["multiscales"][0]["datasets"]]
         return [da.from_zarr(self.group[path]) for path in paths]
 
+    def _splits_channels(self) -> bool:
+        """Whether a channel axis is turned into separate napari layers.
+
+        Images split into one layer per channel via ``channel_axis``, so the
+        channel axis is dropped from the per-axis metadata (axis_labels, units,
+        scale, translate) to match each split layer's reduced ndim. Labels keep
+        every axis in a single layer and so must keep the channel axis (see
+        ``Label._splits_channels``).
+        """
+        return True
+
     def metadata(self) -> Dict[str, Any]:
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
@@ -126,7 +137,7 @@ class Multiscales(Spec):
                 aunits.append(axis.get("unit"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         channel_axis = None
-        if "channel" in atypes:
+        if "channel" in atypes and self._splits_channels():
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
             anames.pop(channel_axis)
@@ -308,14 +319,18 @@ class Label(Multiscales):
             return False
         return "image-label" in Spec.get_attrs(group)
 
+    def _splits_channels(self) -> bool:
+        # A label is loaded as a single layer keeping all axes (no per-channel
+        # split), so the channel axis must be retained in the per-axis metadata
+        # to match the layer ndim.
+        return False
+
     def metadata(self) -> Dict[str, Any]:
         # override Multiscales metadata
         # call super
         ms_data = super().metadata()
         if ms_data is None:
             ms_data = {}
-        if "channel_axis" in ms_data:
-            ms_data.pop("channel_axis")
 
         attrs = Spec.get_attrs(self.group)
         image_label = attrs.get("image-label", {})
