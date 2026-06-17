@@ -20,6 +20,15 @@ from .plate import get_first_field_path, get_first_well, get_pyramid_lazy
 # LayerData = Union[Tuple[Any], Tuple[Any, StrDict], Tuple[Any, StrDict, str]]
 LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
 
+AXES_TYPES = {"x": "space", "y": "space", "z": "space", "c": "channel", "t": "time"}
+AXES_5D = [
+    {"name": "t", "type": "time"},
+    {"name": "c", "type": "channel"},
+    {"name": "z", "type": "space"},
+    {"name": "y", "type": "space"},
+    {"name": "x", "type": "space"},
+]
+
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     """Helper function to match Colormap to an existing napari Colormap.
@@ -200,14 +209,21 @@ class Multiscales(Spec):
     def metadata(self) -> Dict[str, Any]:
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
-        # TODO: handle v0.6 AND v0.5 and earlier...
-        if "axes" in attrs["multiscales"][0]:
-            axes = attrs["multiscales"][0]["axes"]
-        else:
+        # For v0.6+ simply use first coordinateSystem axes...
+        if "coordinateSystems" in attrs["multiscales"][0]:
             axes = attrs["multiscales"][0]["coordinateSystems"][0]["axes"]
+        else:
+            # No axes (v0.1, v0.2), assume 5D (t,c,z,y,x)
+            axes = attrs["multiscales"][0].get("axes", AXES_5D)
+        atypes = []
+        for axis in axes:
+            if isinstance(axis, str):
+                # v0.3
+                atypes.append(AXES_TYPES.get(axis.lower(), "space"))
+            else:
+                atypes.append(axis.get("type", "space"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         channel_axis = None
-        atypes = [axis["type"] for axis in axes]
         if "channel" in atypes:
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
@@ -290,15 +306,12 @@ class Bioformats2raw(Spec):
                 "OME/METADATA.ome.xml", prototype=default_buffer_prototype()
             )
         )
-        # print("xml_data", xml_data.to_bytes())
         root = ET.fromstring(xml_data.to_bytes())
         rv: list[Spec] = []
         for child in root:
             # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
-            print(child.tag)
             node_id = child.attrib.get("ID", "")
             if child.tag.endswith("Image") and node_id.startswith("Image:"):
-                print("Image ID", node_id)
                 image_path = node_id.replace("Image:", "")
                 g = self.group[image_path]
                 if Multiscales.matches(g):
@@ -507,7 +520,6 @@ class Plate(Spec):
             if "labels" in labels_attrs:
                 ch: list[Spec] = []
                 for labels_path in labels_attrs["labels"]:
-                    print("labels_path", labels_path)
                     ch.append(PlateLabels(self.group, labels_path=labels_path))
                 return ch
         return []
@@ -528,10 +540,12 @@ class PlateLabels(Plate):
 
     def metadata(self) -> dict:
         # override Plate metadata (no channel-axis etc)
-        # TODO: read image-label metadata, colors etc
-        return {
-            "name": f"labels/{self.labels_path}",
-        }
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        image_group = well_group[first_field_path]
+        labelimage_group = image_group["labels"][self.labels_path]
+        m = Label(labelimage_group).metadata()
+        return {"scale": m.get("scale", None)}
 
 
 class Labels(Spec):
@@ -575,7 +589,6 @@ class Label(Multiscales):
         # override Multiscales metadata
         # call super
         ms_data = super().metadata()
-        print("Label metadata", ms_data)
         if ms_data is None:
             ms_data = {}
         if "channel_axis" in ms_data:
@@ -626,20 +639,21 @@ class Label(Multiscales):
                     properties[key].append(props_dict.get(key, None))
             ms_data["properties"] = properties
 
-        return {
+        rsp = {
             "name": f"labels{self.group.name}",
-            "colormap": colors,
             "visible": False,  # labels not visible initially
             **ms_data,
         }
+        # in case no colors, don't set colormap (no labels will be shown)
+        if len(colors) > 0:
+            rsp["colormap"] = colors
+
+        return rsp
 
 
 def read_ome_zarr(root_group: Group) -> Callable:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         results: List[LayerData] = list()
-
-        # # TODO: handle missing file
-        # root_group = zarr.open(url)
 
         print("Root group", root_group.attrs.asdict())
 
@@ -676,15 +690,13 @@ def read_ome_zarr(root_group: Group) -> Callable:
             print("No matching spec", root_group)
 
         if spec:
-            print("spec", spec)
             nodes = list(spec.iter_nodes())
-            print("Nodes", nodes)
             for node in nodes:
                 print("node", node, node.group)
                 node_data = node.data()
                 metadata = node.metadata()
+                print("Node:", node.group.name, "metadata:", metadata)
                 layer_type = "image"
-                # print(Spec.get_attrs(node.group))
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     layer_type = "labels"
                 rv: LayerData = (node_data, metadata, layer_type)

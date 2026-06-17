@@ -96,9 +96,9 @@ class TestNapari:
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_image(self, path):
-        pth_to_image = str(getattr(self, path))
-        print(f"test_image {pth_to_image}")
-        layers = napari_get_reader(pth_to_image)()
+        path_to_image = str(getattr(self, path))
+        print(f"test_image {path_to_image}")
+        layers = napari_get_reader(path_to_image)()
         self.assert_layers(layers, True, False, path)
 
     def test_labels(self):
@@ -135,6 +135,7 @@ class TestPlates:
         create_zarr() creates an image pyramid and labels zarr directories.
         """
         self.plate_path = tmp_path / "plate.zarr"
+        print(f"Creating test plate at {self.plate_path}")
 
         self.row_names = ["A", "B"]
         self.col_names = ["1", "2", "3"]
@@ -195,17 +196,22 @@ class TestPlates:
                         well_idx = self.well_paths.index(well_path)
                         # field is 0
                         expected_pixel_val = well_idx * 10
+                    print(
+                        "well_path", well_path, "expected_pixel_val", expected_pixel_val
+                    )
                     # check pixel at top-left of each Well
                     well_coord_y = tiley * row_idx
                     well_coord_x = tilex * col_idx
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        == expected_pixel_val
                     )
                     # check pixel in centre of each Well - same value
                     well_coord_y = tiley * row_idx + tiley // 2
                     well_coord_x = tilex * col_idx + tilex // 2
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x] == expected_pixel_val
+                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        == expected_pixel_val
                     )
 
             tilex = math.ceil(tilex / 2)

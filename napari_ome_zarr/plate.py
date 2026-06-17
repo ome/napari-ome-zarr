@@ -39,7 +39,7 @@ def get_pyramid_lazy(plate_group: Group, labels_path: str | None = None) -> list
     pyramid = []
     for level, tile_shape in enumerate(img_pyramid_shapes):
         lazy_plate = get_stitched_grid(
-            plate_group, level, tile_shape, numpy_type, first_field_path
+            plate_group, paths[level], tile_shape, numpy_type, first_field_path
         )
         pyramid.append(lazy_plate)
 
@@ -53,7 +53,7 @@ def get_pyramid_lazy(plate_group: Group, labels_path: str | None = None) -> list
 
 def get_stitched_grid(
     plate_group: Group,
-    level: int,
+    level: str,
     tile_shape: tuple,
     numpy_type: DTypeLike,
     first_field_path: str,
