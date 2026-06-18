@@ -323,16 +323,12 @@ class Bioformats2raw(Spec):
             yield from child.iter_nodes()
 
 
-def path_name(in_out: dict | str) -> str:
-    # helper to get path from 'input' or 'output' dict
-    if isinstance(in_out, str):
-        return in_out
-    paths = []
+def cs_path_name(in_out: dict) -> str:
+    # helper to get [path/]name from 'input' or 'output' dict
+    name = in_out["name"]
     if "path" in in_out:
-        paths.append(in_out["path"])
-    if "name" in in_out:
-        paths.append(in_out["name"])
-    return "/".join(paths)
+        name = in_out["path"] + "/" + name
+    return name
 
 
 def iter_graph(
@@ -399,8 +395,8 @@ class Scene(Spec):
         visited_paths = set()
         for transf in scene_attrs.get("coordinateTransformations", []):
             output = transf["output"]
-            transf["input_full_path"] = path_name(transf["input"])
-            transforms[path_name(output)].append(transf)
+            transf["input_full_path"] = cs_path_name(transf["input"])
+            transforms[cs_path_name(output)].append(transf)
             # traverse to input/output coordinateSystem paths...
             for io in ("input", "output"):
                 image_path = transf[io].get("path", None)
