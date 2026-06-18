@@ -242,7 +242,6 @@ class Multiscales(Spec):
                 transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
 
         # compile all transforms into single Affine
-        print("\nALL transforms:", transforms)
         rsp["affine"] = transforms_to_affine(transforms, channel_axis)
 
         if "omero" in attrs:
@@ -336,65 +335,68 @@ def path_name(in_out: dict | str) -> str:
     return "/".join(paths)
 
 
+def iter_graph(
+    path_name: str | None,
+    parent_trans: list[Dict[str, Any]],
+    transforms: Dict[str, List[Dict[str, Any]]],
+) -> Iterable[list[Dict[str, Any]]]:
+    # find list of child transforms that output to this node
+    if path_name is None:
+        yield parent_trans
+        return
+    node_transfs = transforms.get(path_name)
+    if node_transfs is None:
+        yield parent_trans
+    else:
+        for transf in node_transfs:
+            parents_copy = parent_trans[:]
+            parents_copy.append(transf)
+            yield from iter_graph(
+                transf.get("input_full_path"), parents_copy, transforms
+            )
+
+
 class Scene(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
         attrs = Spec.get_attrs(group)
-        print("Scene.matches", attrs)
         return "scene" in attrs
 
-    def children(self) -> list[Spec]:
-        # lookup children from coordinateTransformations 'input' paths
-        rv: list[Spec] = []
-        scene_attrs = Spec.get_attrs(self.group).get("scene", {})
-        transfs = scene_attrs.get("coordinateTransformations", [])
-        output = None
-        for transf in transfs:
-            # TODO: input may NOT have "path"
-            # TODO: input "name" is ignored!
-            image_path = transf.get("input").get("path", None)
-            out = transf.get("output")
-            if output is None:
-                output = out
-            elif path_name(output) != path_name(out):
-                print(
-                    f"WARNING: '{path_name(out)}' output different"
-                    f"from previous '{path_name(output)}'"
+    def add_transforms_from_image(self, image_path: str, transforms: dict) -> None:
+        image_attrs = Spec.get_attrs(self.group[image_path])
+        # need to add child transforms to our graph
+        for ms in image_attrs.get("multiscales", []):
+            for child_transf in ms.get("coordinateTransformations", []):
+                # TODO: assert output doesn't have 'path'?
+                out_path_name = image_path + "/" + child_transf["output"]["name"]
+                child_transf["input_full_path"] = (
+                    image_path + "/" + child_transf["input"]["name"]
                 )
-                continue
-            g = self.group[image_path]
-            print("scene child", image_path, g)
-            if Multiscales.matches(g):
-                ms_image = Multiscales(g)
-                # child image gets the parent transform
-                # TODO: use the input 'name' to specify which coordinateSystem to use
-                ms_image.parent_transforms.append(transf)
-                rv.append(ms_image)
+                transforms[out_path_name].append(child_transf)
+            # and the datasets... - find 'output' (just use first one)
+            for ds in ms.get("datasets", [])[:1]:
+                # only expect single transform...
+                for ds_transf in ds.get("coordinateTransformations", []):
+                    # TODO: assert output doesn't have 'path'?
+                    out_path_name = image_path + "/" + ds_transf["output"]["name"]
+                    # We ASSUME that ds_transf["input"]["path"] is same as ds path
+                    # Don't set 'input_full_path' as we are at child node of graph
+                    # Use this to create the Multiscales object below...
+                    ds_transf["multiscale_path"] = image_path
+                    transforms[out_path_name].append(ds_transf)
 
-        # check if 'output' is path to image...
-        try:
-            if output is not None:
-                g = self.group[output.get("path", "")]
-                if Multiscales.matches(g):
-                    # Add to start (layer behind other tiles)
-                    rv.insert(0, Multiscales(g))
-        except KeyError:
-            pass
-        return rv
-
-    # override to NOT yield self since node has no data
     def iter_nodes(self) -> Iterable[Spec]:
 
         # transforms key is each transform output "path.zarr/name"
         # (where name is name of coordinateSystem)
+        # we build a LIST of child transforms that output to each coordinateSystem...
         transforms = defaultdict(list)  # type: Dict[str, List[Dict[str, Any]]]
         # track unique coordinateSystems by "path.zarr/name"
-        # systems = set()
 
         # FIRST, go through all transforms in this scene,
         # AND any child transforms we find at 'input' or 'output' paths...
         scene_attrs = Spec.get_attrs(self.group).get("scene", {})
-        image_attrs = {}
+        visited_paths = set()
         for transf in scene_attrs.get("coordinateTransformations", []):
             output = transf["output"]
             transf["input_full_path"] = path_name(transf["input"])
@@ -402,34 +404,11 @@ class Scene(Spec):
             # traverse to input/output coordinateSystem paths...
             for io in ("input", "output"):
                 image_path = transf[io].get("path", None)
-                if image_path is not None and image_path not in image_attrs:
-                    image_attrs[image_path] = Spec.get_attrs(self.group[image_path])
-                    # need to add child transforms to our graph
-                    for ms in image_attrs[image_path].get("multiscales", []):
-                        for child_transf in ms.get("coordinateTransformations", []):
-                            # TODO: assert output doesn't have 'path'?
-                            out_name = path_name(child_transf["output"])
-                            out_path_name = image_path + "/" + out_name
-                            input_path_name = (
-                                image_path + "/" + path_name(child_transf["input"])
-                            )
-                            child_transf["input_full_path"] = input_path_name
-                            transforms[out_path_name].append(child_transf)
-                        # and the datasets... - find 'output' (just use first one)
-                        for ds in ms.get("datasets", [])[:1]:
-                            # only expect single transform...
-                            for ds_transf in ds.get("coordinateTransformations", []):
-                                out_name = path_name(ds_transf["output"])
-                                out_path_name = image_path + "/" + out_name
-                                # don't expect this to be used. e.g. image.zarr/s0
-                                input_path_name = (
-                                    image_path + "/" + path_name(ds_transf["input"])
-                                )
-                                ds_transf["input_full_path"] = input_path_name
-                                transforms[out_path_name].append(ds_transf)
-                                # Use this to create the Multiscales object below...
-                                ds_transf["multiscale_path"] = image_path
+                if image_path is not None and image_path not in visited_paths:
+                    self.add_transforms_from_image(image_path, transforms)
+                    visited_paths.add(image_path)
 
+        # Useful debug out to see the graph of transforms...
         # print("Scene.iter_nodes...transforms")
         # for key, transfs in transforms.items():
         #     print(f"  {key}: ", [t["input_full_path"] for t in transfs])
@@ -441,56 +420,36 @@ class Scene(Spec):
         #   rot45.zarr/rotated:  ['rot45.zarr/physical']
         #   rot45.zarr/physical:  ['rot45.zarr/s0']
 
-        # find the unique coordinateSystems (outputs)
+        # find the unique coordinateSystems (outputs) that are NOT also inputs
         outputs = set(transforms.keys())
-
-        # remove any output that is also an input (i.e. intermediate node in graph)
         for transf_list in transforms.values():
-            outputs -= {t["input_full_path"] for t in transf_list}
+            outputs -= {t.get("input_full_path") for t in transf_list}
 
-        print("Scene.iter_nodes...final outputs ----->", outputs)
+        # if more than 1 output, pick the one with most child inputs
+        chosen_output = None
+        if len(outputs) > 1:
+            max_inputs = 0
+            for output in outputs:
+                num_inputs = len(list(iter_graph(output, [], transforms)))
+                if num_inputs > max_inputs:
+                    max_inputs = num_inputs
+                    chosen_output = output
+        else:
+            chosen_output = outputs.pop()
 
-        assert len(outputs) == 1, "Multiple output coordinateSystems not supported"
-
-        # now we can iterate through the graph starting at the unique output
-        # coordinateSystem, and yield any nodes we find along the way...
-        def iter_graph(
-            path_name: str, parent_trans: list[Dict[str, Any]]
-        ) -> Iterable[list[Dict[str, Any]]]:
-            # find transforms that output to this node
-            node_transfs = transforms.get(path_name)
-            # print("iter_graph", path_name, parent_trans)
-
-            if node_transfs is None:
-                yield parent_trans
-            # find the group for this node
-            else:
-                for transf in node_transfs:
-                    parents_copy = parent_trans[:]
-                    parents_copy.append(transf)
-                    yield from iter_graph(transf["input_full_path"], parents_copy)
-
-        output = outputs.pop()
-        inputs = list(iter_graph(output, []))
-
-        print("IMAGES")
-
+        # now iterate through the graph starting at the chosen output...
+        inputs = list(iter_graph(chosen_output, [], transforms))
         # Ignore any transform lists that don't lead to a multiscale image...
         multiscale_inputs = [inp for inp in inputs if "multiscale_path" in inp[-1]]
 
         for trans_list in multiscale_inputs:
-            print("---------------------")
-            print(trans_list[-1]["multiscale_path"])
             # the last transform should have "multiscale_path" key...
             ms_image = Multiscales(self.group[trans_list[-1]["multiscale_path"]])
-
-            # reverse, so we START at datasets -> coordinateSystem -> scene
+            # transforms list was created from [output,...,input]
+            # we reverse to get [input,...,output] to apply transforms in correct order
             trans_list.reverse()
             ms_image.parent_transforms = trans_list
             yield ms_image
-
-        # for child in self.children():
-        #     yield from child.iter_nodes()
 
 
 class Plate(Spec):
@@ -581,7 +540,6 @@ class Label(Multiscales):
             parent_channel_axis is not None
             and parent_channel_axis != label_channel_axis
         ):
-            print("remove axis from transform", parent_channel_axis)
             transform = remove_axis_from_transform(transform, parent_channel_axis)
         self.parent_transforms.append(transform)
 
@@ -684,7 +642,6 @@ def read_ome_zarr(root_group: Group) -> Callable:
         elif Plate.matches(root_group):
             spec = Plate(root_group)
         elif Scene.matches(root_group):
-            print("Scene")
             spec = Scene(root_group)
         else:
             print("No matching spec", root_group)
@@ -692,10 +649,8 @@ def read_ome_zarr(root_group: Group) -> Callable:
         if spec:
             nodes = list(spec.iter_nodes())
             for node in nodes:
-                print("node", node, node.group)
                 node_data = node.data()
                 metadata = node.metadata()
-                print("Node:", node.group.name, "metadata:", metadata)
                 layer_type = "image"
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     layer_type = "labels"
