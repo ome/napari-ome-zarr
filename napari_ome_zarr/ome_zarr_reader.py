@@ -87,26 +87,16 @@ def single_transform_to_affine(transform: Dict[str, Any]) -> Affine:
         aff = Affine(translate=transform["translation"])
     elif transform["type"] == "rotation":
         matrix = np.array(transform["rotation"])
-        # Spec says that rotation matrix is 1 row and column smaller than affine
-        matrix = np.pad(
-            matrix,
-            pad_width=((0, 1), (0, 1)),
-            mode="constant",
-            constant_values=0,
-        )
-        matrix[-1, -1] = 1
-        aff = Affine(affine_matrix=matrix)
+        # Spec says that "rotation" matrix is (N)x(N). We want (N+1)x(N+1)
+        affine_matrix = np.eye(matrix.shape[0] + 1)
+        affine_matrix[:-1, :-1] = matrix
+        aff = Affine(affine_matrix=affine_matrix)
     elif transform["type"] == "affine":
         matrix = np.array(transform["affine"])
-        # Spec says that rotation matrix is 1 row smaller than affine
-        matrix = np.pad(
-            matrix,
-            pad_width=((0, 1), (0, 0)),
-            mode="constant",
-            constant_values=0,
-        )
-        matrix[-1, -1] = 1
-        aff = Affine(affine_matrix=matrix)
+        # Spec says that "affine" matrix is (M)x(N+1). We want (M+1)x(N+1)
+        affine_matrix = np.eye(matrix.shape[0] + 1)
+        affine_matrix[:-1, :] = matrix
+        aff = Affine(affine_matrix=affine_matrix)
     return aff
 
 
