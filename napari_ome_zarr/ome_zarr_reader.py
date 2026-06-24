@@ -1,5 +1,6 @@
 # zarr v3
 
+import warnings
 from abc import ABC
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
@@ -77,14 +78,14 @@ def remove_axis_from_transform(transform: Dict[str, Any], axis: int) -> Dict[str
     return new_transform
 
 
-def transform_to_affine(transform: Dict[str, Any]) -> Affine:
+def single_transform_to_affine(transform: Dict[str, Any]) -> Affine:
     """Convert a single OME-Zarr transform dict to an Affine object."""
     aff: Affine = None
     if transform["type"] == "scale":
         aff = Affine(scale=transform["scale"])
-    if transform["type"] == "translation":
+    elif transform["type"] == "translation":
         aff = Affine(translate=transform["translation"])
-    if transform["type"] == "rotation":
+    elif transform["type"] == "rotation":
         matrix = np.array(transform["rotation"])
         # Spec says that rotation matrix is 1 row and column smaller than affine
         matrix = np.pad(
@@ -95,7 +96,7 @@ def transform_to_affine(transform: Dict[str, Any]) -> Affine:
         )
         matrix[-1, -1] = 1
         aff = Affine(affine_matrix=matrix)
-    if transform["type"] == "affine":
+    elif transform["type"] == "affine":
         matrix = np.array(transform["affine"])
         # Spec says that rotation matrix is 1 row smaller than affine
         matrix = np.pad(
@@ -125,7 +126,10 @@ def transforms_to_affine(
     aff: Affine = None
     for transf in flat_transforms:
         # print("transforms_to_affine..........ch,transf", channel_axis, transf)
-        trans_aff = transform_to_affine(transf)
+        trans_aff = single_transform_to_affine(transf)
+        if trans_aff is None:
+            warnings.warn(f"Unsupported transform type: {transf['type']}")
+            continue
         if aff is None:
             aff = trans_aff
         elif trans_aff is not None:
