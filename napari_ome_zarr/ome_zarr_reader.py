@@ -186,9 +186,10 @@ class Multiscales(Spec):
                     g = grp[name]
                     if Label.matches(g):
                         label_image = Label(g)
-                        # Label inherits parent transforms
+                        # Label inherits parent transforms...
                         ch_axis = self.metadata().get("channel_axis", None)
                         for transf in self.parent_transforms:
+                            # ...to transform it to same space as parent image
                             label_image.add_parent_transform(transf, ch_axis)
                         ch.append(label_image)
         except KeyError:
