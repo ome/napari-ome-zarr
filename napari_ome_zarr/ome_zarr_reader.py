@@ -229,13 +229,19 @@ class Multiscales(Spec):
         if len(self.parent_transforms) > 0:
             transforms.extend(self.parent_transforms)
         else:
-            # First we handle transforms from datasets[0]...
-            if "coordinateTransformations" in dataset_0:
-                transforms.extend(dataset_0["coordinateTransformations"])
-            # Then check for coordinateTransformations at top level
+            # First we handle (single) transform from datasets[0]...
+            ds_transform = dataset_0["coordinateTransformations"][0]
+            transforms.append(ds_transform)
+            intrinsic_system = ds_transform["output"]["name"]
+            # Then check for transformations at top level, with "input" of intrinsic
             if "coordinateTransformations" in attrs["multiscales"][0]:
-                transforms.extend(attrs["multiscales"][0]["coordinateTransformations"])
-
+                from_intrinsic = [
+                    t
+                    for t in attrs["multiscales"][0]["coordinateTransformations"]
+                    if t["input"]["name"] == intrinsic_system
+                ]
+                # These are alternative transforms (not a sequence) - pick the first
+                transforms.extend(from_intrinsic[:1])
         # compile all transforms into single Affine
         rsp["affine"] = transforms_to_affine(transforms, channel_axis)
 
