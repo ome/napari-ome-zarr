@@ -230,15 +230,20 @@ class Multiscales(Spec):
             transforms.extend(self.parent_transforms)
         else:
             # First we handle (single) transform from datasets[0]...
-            ds_transform = dataset_0["coordinateTransformations"][0]
-            transforms.append(ds_transform)
-            intrinsic_system = ds_transform["output"]["name"]
+            # NB: older versions may not have dataset.coordinateTransformations
+            ds_transforms = dataset_0.get("coordinateTransformations", [])
+            intrinsic_name = None
+            if len(ds_transforms) > 0:
+                ds_transform = ds_transforms[0]
+                transforms.append(ds_transform)
+                # we only get intrinsic_name from v0.6 data
+                intrinsic_name = ds_transform.get("output", {}).get("name", None)
             # Then check for transformations at top level, with "input" of intrinsic
             if "coordinateTransformations" in attrs["multiscales"][0]:
                 from_intrinsic = [
                     t
                     for t in attrs["multiscales"][0]["coordinateTransformations"]
-                    if t["input"]["name"] == intrinsic_system
+                    if t.get("input", {}).get("name", None) == intrinsic_name
                 ]
                 # These are alternative transforms (not a sequence) - pick the first
                 transforms.extend(from_intrinsic[:1])
