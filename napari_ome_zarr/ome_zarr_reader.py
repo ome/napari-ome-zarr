@@ -218,6 +218,7 @@ class Multiscales(Spec):
             else:
                 atypes.append(axis.get("type", "space"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
+        img_name = attrs["multiscales"][0].get("name", None)
         channel_axis = None
         if "channel" in atypes:
             channel_axis = atypes.index("channel")
@@ -269,7 +270,10 @@ class Multiscales(Spec):
                     # Try to match colormap to an existing napari colormap
                     cm = _match_colors_to_available_colormap(cm)
                     colormaps.append(cm)
-                ch_names.append(ch.get("label", f"channel_{index}"))
+                ch_name = ch.get("label", f"channel_{index}")
+                ch_names.append(
+                    img_name is not None and f"{img_name}: {ch_name}" or ch_name
+                )
                 visibles.append(ch.get("active", True))
 
                 window = ch.get("window", None)
