@@ -249,7 +249,12 @@ class Multiscales(Spec):
                 # These are alternative transforms (not a sequence) - pick the first
                 transforms.extend(from_intrinsic[:1])
         # compile all transforms into single Affine
-        rsp["affine"] = transforms_to_affine(transforms, channel_axis)
+        affine = transforms_to_affine(transforms, channel_axis)
+        # some plugins find it useful to have the scale separate from the affine
+        rsp["scale"] = affine.scale.tolist()
+        # undo the scale component of the affine (so we don't duplicate it)
+        affine.scale = np.ones(len(affine.scale))
+        rsp["affine"] = affine
 
         if "omero" in attrs:
             colormaps = []
