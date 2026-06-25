@@ -551,8 +551,6 @@ class Label(Multiscales):
         ms_data = super().metadata()
         if ms_data is None:
             ms_data = {}
-        if "channel_axis" in ms_data:
-            ms_data.pop("channel_axis")
 
         attrs = Spec.get_attrs(self.group)
         image_label = attrs.get("image-label", {})
@@ -656,6 +654,14 @@ def read_ome_zarr(root_group: Group) -> Callable:
                 layer_type = "image"
                 if Label.matches(node.group) or isinstance(node, PlateLabels):
                     layer_type = "labels"
+                    # napari "labels" layer MUST not have "channel_axis"
+                    if "channel_axis" in metadata:
+                        ch_axis = metadata.pop("channel_axis")
+                        # also splice out channel_axis from node_data if present
+                        for level in range(len(node_data)):
+                            darray = node_data[level]
+                            if darray.ndim > ch_axis:
+                                node_data[level] = da.squeeze(darray, axis=ch_axis)
                 rv: LayerData = (node_data, metadata, layer_type)
                 results.append(rv)
 
