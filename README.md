@@ -81,7 +81,7 @@ at the "top" of the graph is used to display all the images, with all relevant t
 each image. If the graph contains multiple "top" `coordinateSystems`, the one with the most input images
 is chosen for display.
 Only the first `coordinateSystem` from each image is read in order to determine the `Axes`. The Scene graph is
-constructed purely from `coordinateTransforms`.
+constructed purely from `coordinateTransformations`.
 
 Supported `coordinateTransforms` include `identity`, `scale`, `translation`, `rotation`, `affine` and `sequence`
 (containing these other transforms).
