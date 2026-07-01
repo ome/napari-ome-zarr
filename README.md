@@ -75,7 +75,7 @@ All Images found in the series will be opened in napari.
 
 ### Scenes
 
-If the `path_to_image.zarr` contains a `Scene`, the `coordinateTransforms` with their `input` and `output`
+If the `path_to_image.zarr` contains a `Scene`, the `coordinateTransformations` with their `input` and `output`
 path/names are used to build a "graph" that includes transforms from the child images. The `coordinateSystem`
 at the "top" of the graph is used to display all the images, with all relevant transforms being applied to
 each image. If the graph contains multiple "top" `coordinateSystems`, the one with the most input images
