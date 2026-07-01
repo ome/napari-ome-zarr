@@ -83,7 +83,7 @@ is chosen for display.
 Only the first `coordinateSystem` from each image is read in order to determine the `Axes`. The Scene graph is
 constructed purely from `coordinateTransformations`.
 
-Supported `coordinateTransforms` include `identity`, `scale`, `translation`, `rotation`, `affine` and `sequence`
+Supported `coordinateTransformations` currently include `identity`, `scale`, `translation`, `rotation`, `affine` and `sequence`
 (containing these other transforms).
 
 ## Contributing
