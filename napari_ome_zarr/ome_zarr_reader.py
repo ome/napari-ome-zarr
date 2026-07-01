@@ -582,7 +582,7 @@ class Label(Multiscales):
         # split), so the channel axis must be retained in the per-axis metadata
         # to match the layer ndim.
         return False
-    
+
     def add_parent_transform(
         self, transform: Dict[str, Any], parent_channel_axis: int | None
     ) -> None:
