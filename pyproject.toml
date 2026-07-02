@@ -22,6 +22,8 @@ classifiers = [
 dependencies = [
     "napari>=0.4.0",
     "zarr>=3.1.5",
+    "requests",
+    "aiohttp"
 ]
 
 [project.entry-points."napari.manifest"]
