@@ -4,10 +4,10 @@ schema_version: 0.1.0
 contributions:
   commands:
     - id: napari-ome-zarr.get_reader
-      title: Zarr Reader (Lazy)
+      title: Zarr Reader (Keep data on disk)
       python_name: napari_ome_zarr._reader:napari_get_reader
     - id: napari-ome-zarr.get_eager_reader
-      title: Zarr Reader (Eager)
+      title: Zarr Reader (Load full data to RAM)
       python_name: napari_ome_zarr._reader:napari_get_eager_reader
   readers:
     - command: napari-ome-zarr.get_reader
