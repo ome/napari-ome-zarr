@@ -42,7 +42,7 @@ def napari_get_eager_reader(path: str | list) -> Callable | None:
             lazy_result = read_ome_zarr_lazy(*args, **kwargs)
             eager_result = []
             for data, metadata, layer_type in lazy_result:
-                if type(data) == list:  # multiscales
+                if isinstance(data, list):  # multiscales
                     eager_data = list(map(np.asarray, data))
                 else:  # single scale
                     eager_data = np.asarray(data)
