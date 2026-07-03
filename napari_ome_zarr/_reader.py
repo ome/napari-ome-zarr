@@ -4,12 +4,12 @@ It implements the ``napari_get_reader`` hook specification, (to create a reader 
 """
 
 import warnings
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import zarr
 
-from .ome_zarr_reader import read_ome_zarr
+from .ome_zarr_reader import LayerData, read_ome_zarr
 
 
 def napari_get_reader(path: str | list) -> Callable | None:
@@ -38,7 +38,7 @@ def napari_get_eager_reader(path: str | list) -> Callable | None:
     read_ome_zarr_lazy = napari_get_reader(path)
     if read_ome_zarr_lazy is not None:
 
-        def read_ome_zarr_eager(*args, **kwargs):
+        def read_ome_zarr_eager(*args: Any, **kwargs: Any) -> list[LayerData]:
             lazy_result = read_ome_zarr_lazy(*args, **kwargs)
             eager_result = []
             for data, metadata, layer_type in lazy_result:
