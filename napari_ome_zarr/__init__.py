@@ -4,4 +4,4 @@ except ImportError:
     __version__ = "unknown"
 
 
-from ._reader import napari_get_reader, napari_get_eager_reader  # noqa
+from ._reader import napari_get_eager_reader, napari_get_reader  # noqa

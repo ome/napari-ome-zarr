@@ -37,6 +37,7 @@ def napari_get_reader(path: str | list) -> Callable | None:
 def napari_get_eager_reader(path: str | list) -> Callable | None:
     read_ome_zarr_lazy = napari_get_reader(path)
     if read_ome_zarr_lazy is not None:
+
         def read_ome_zarr_eager(*args, **kwargs):
             lazy_result = read_ome_zarr_lazy(*args, **kwargs)
             eager_result = []
@@ -47,4 +48,5 @@ def napari_get_eager_reader(path: str | list) -> Callable | None:
                     eager_data = np.asarray(data)
                 eager_result.append((eager_data, metadata, layer_type))
             return eager_result
+
         return read_ome_zarr_eager
