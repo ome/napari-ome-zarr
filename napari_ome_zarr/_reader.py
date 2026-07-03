@@ -50,3 +50,4 @@ def napari_get_eager_reader(path: str | list) -> Callable | None:
             return eager_result
 
         return read_ome_zarr_eager
+    return None
