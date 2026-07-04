@@ -137,6 +137,9 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     assert colormap.name == expected_name
 
 
+SPATIAL_UNITS = {"z": "micrometer", "y": "micrometer", "x": "micrometer"}
+
+
 def test_units_forwarded(tmp_path: Path):
     """NGFF v0.4+ axes carry per-axis ``unit``; forward into napari ``units``."""
     path = tmp_path / "with_units.zarr"
@@ -144,11 +147,13 @@ def test_units_forwarded(tmp_path: Path):
     image = np.zeros((1, 4, 8, 8), dtype=np.uint8)
     axes = [
         {"name": "c", "type": "channel"},
-        {"name": "z", "type": "space", "unit": "micrometer"},
-        {"name": "y", "type": "space", "unit": "micrometer"},
-        {"name": "x", "type": "space", "unit": "micrometer"},
+        {"name": "z", "type": "space"},
+        {"name": "y", "type": "space"},
+        {"name": "x", "type": "space"},
     ]
-    write_image(image=image, group=grp, axes=axes)
+    # units are supplied via the ``axes_units`` argument: write_image ignores a
+    # ``unit`` key embedded in the axes dicts (ome-zarr >=0.18).
+    write_image(image=image, group=grp, axes=axes, axes_units=SPATIAL_UNITS)
 
     layers = napari_get_reader(str(path))()
     assert len(layers) == 1
@@ -165,16 +170,24 @@ def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
     napari raised ``axis_labels must have length ndim``)."""
     path = tmp_path / "img_with_label.zarr"
     root = zarr.open_group(str(path), mode="w")
-    # spatial axes carry a unit, the channel axis does not
     axes = [
         {"name": "c", "type": "channel"},
-        {"name": "z", "type": "space", "unit": "micrometer"},
-        {"name": "y", "type": "space", "unit": "micrometer"},
-        {"name": "x", "type": "space", "unit": "micrometer"},
+        {"name": "z", "type": "space"},
+        {"name": "y", "type": "space"},
+        {"name": "x", "type": "space"},
     ]
-    write_image(image=np.zeros((2, 4, 8, 8), dtype=np.uint8), group=root, axes=axes)
+    write_image(
+        image=np.zeros((2, 4, 8, 8), dtype=np.uint8),
+        group=root,
+        axes=axes,
+        axes_units=SPATIAL_UNITS,
+    )
     write_labels(
-        labels=np.zeros((1, 4, 8, 8), dtype=np.int8), group=root, name="lbl", axes=axes
+        labels=np.zeros((1, 4, 8, 8), dtype=np.int8),
+        group=root,
+        name="lbl",
+        axes=axes,
+        axes_units=SPATIAL_UNITS,
     )
 
     layers = napari_get_reader(str(path))()
