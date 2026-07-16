@@ -273,7 +273,9 @@ class Multiscales(Spec):
                     if greyscale:
                         rgb = [1, 1, 1]
                     # colormap is range: black -> rgb color
-                    cm = Colormap([[0, 0, 0], rgb])
+                    cm = Colormap(
+                        [[0, 0, 0], rgb], name=f"ome-zarr-{color[:6].lower()}"
+                    )
                     # Try to match colormap to an existing napari colormap
                     cm = _match_colors_to_available_colormap(cm)
                     colormaps.append(cm)

@@ -9,7 +9,10 @@ from ome_zarr.data import astronaut, create_zarr
 from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
 
 from napari_ome_zarr._reader import napari_get_reader
-from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
+from napari_ome_zarr.ome_zarr_reader import (
+    _match_colors_to_available_colormap,
+    read_ome_zarr,
+)
 
 
 class TestNapari:
@@ -124,6 +127,87 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     colormap = Colormap(colors)
     colormap = _match_colors_to_available_colormap(colormap)
     assert colormap.name == expected_name
+
+
+def test_custom_channel_colormaps_survive_qt_controls(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from napari._qt.layer_controls.qt_layer_controls_container import (
+        QtLayerControlsContainer,
+    )
+    from napari.components import ViewerModel
+    from qtpy.QtWidgets import QApplication
+
+    root = zarr.group()
+    root.create_array("0", data=np.zeros((2, 2, 2), dtype=np.uint8))
+    root.attrs.update(
+        {
+            "multiscales": [
+                {
+                    "axes": [
+                        {"name": "c", "type": "channel"},
+                        {"name": "y", "type": "space"},
+                        {"name": "x", "type": "space"},
+                    ],
+                    "datasets": [
+                        {
+                            "path": "0",
+                            "coordinateTransformations": [
+                                {"type": "scale", "scale": [1, 1, 1]}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "omero": {
+                "channels": [
+                    {"color": "0500FF", "label": "blue custom"},
+                    {"color": "03FF00", "label": "green custom"},
+                ]
+            },
+        }
+    )
+
+    layer_data = read_ome_zarr(root)()[0]
+    reader_colormaps = layer_data[1]["colormap"]
+    expected_rgb = np.array([[5, 0, 255], [3, 255, 0]]) / 255
+    app = QApplication.instance()
+    owns_app = app is None
+    if owns_app:
+        app = QApplication([])
+    viewer = ViewerModel()
+    controls = QtLayerControlsContainer(viewer)
+    try:
+        layers = viewer._add_layer_from_data(*layer_data)
+        for layer in layers:
+            controls.widgets[layer]._colormap_control._on_colormap_change()
+        app.processEvents()
+
+        reader_names = [cmap.name for cmap in reader_colormaps]
+        reader_rgb = np.array([cmap.colors[-1, :3] for cmap in reader_colormaps])
+        qt_rgb = np.array([layer.colormap.colors[-1, :3] for layer in layers])
+        print("reader names:", reader_names)
+        print("reader RGB:", reader_rgb.tolist())
+        print("Qt controls RGB:", qt_rgb.tolist())
+
+        assert reader_names == ["ome-zarr-0500ff", "ome-zarr-03ff00"]
+        assert np.allclose(reader_rgb, expected_rgb)
+        assert np.allclose(qt_rgb, expected_rgb)
+    finally:
+        viewer.layers.clear()
+        controls.close()
+        controls.deleteLater()
+        app.processEvents()
+        if owns_app:
+            app.closeAllWindows()
+            app.quit()
+
+    root.attrs["omero"] = {"channels": [{"color": "0000FF"}, {"color": "00FF00"}]}
+    standard_colormaps = read_ome_zarr(root)()[0][1]["colormap"]
+    assert [cmap.name for cmap in standard_colormaps] == ["blue", "green"]
+
+    root.attrs["omero"] = {"channels": [{"color": "not-a-color"}]}
+    with pytest.raises(ValueError):
+        read_ome_zarr(root)()
 
 
 class TestPlates:
