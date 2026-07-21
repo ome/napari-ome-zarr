@@ -6,7 +6,12 @@ import pytest
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr.data import astronaut, create_zarr
-from ome_zarr.writer import write_image, write_plate_metadata, write_well_metadata
+from ome_zarr.writer import (
+    write_image,
+    write_labels,
+    write_plate_metadata,
+    write_well_metadata,
+)
 
 from napari_ome_zarr._reader import napari_get_reader
 from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
@@ -45,9 +50,15 @@ class TestNapari:
         if path == "path_3d":
             assert image[1]["channel_axis"] == 0
             assert image[1]["name"] == ["Red", "Green", "Blue"]
+            # cyx image with c dropped; labels are yx (no channel).
+            assert image[1]["axis_labels"] == ("y", "x")
+            assert label[1]["axis_labels"] == ("y", "x")
         else:
             assert "channel_axis" not in image[1]
             assert image[1]["name"] == "channel_0"
+            assert image[1]["axis_labels"] == ("y", "x")
+        # create_zarr() doesn't set per-axis units.
+        assert "units" not in image[1]
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_get_reader_with_list(self, path):
@@ -126,6 +137,81 @@ def test_match_colors_to_available_colormap(colors, expected_name):
     assert colormap.name == expected_name
 
 
+SPATIAL_UNITS = {"z": "micrometer", "y": "micrometer", "x": "micrometer"}
+
+
+def test_units_forwarded(tmp_path: Path):
+    """NGFF v0.4+ axes carry per-axis ``unit``; forward into napari ``units``."""
+    path = tmp_path / "with_units.zarr"
+    grp = zarr.open_group(str(path), mode="w")
+    image = np.zeros((1, 4, 8, 8), dtype=np.uint8)
+    axes = [
+        {"name": "c", "type": "channel"},
+        {"name": "z", "type": "space"},
+        {"name": "y", "type": "space"},
+        {"name": "x", "type": "space"},
+    ]
+    # units are supplied via the ``axes_units`` argument: write_image ignores a
+    # ``unit`` key embedded in the axes dicts (ome-zarr >=0.18).
+    write_image(image=image, group=grp, axes=axes, axes_units=SPATIAL_UNITS)
+
+    layers = napari_get_reader(str(path))()
+    assert len(layers) == 1
+    _, metadata, _ = layers[0]
+    assert metadata["channel_axis"] == 0
+    assert metadata["axis_labels"] == ("z", "y", "x")
+    assert metadata["units"] == ("micrometer", "micrometer", "micrometer")
+
+
+def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
+    """A label is one un-split layer, so it must keep the channel axis in its
+    axis_labels (regression: previously the channel axis was dropped from
+    axis_labels but not from the data, so axis_labels length != layer ndim and
+    napari raised ``axis_labels must have length ndim``)."""
+    path = tmp_path / "img_with_label.zarr"
+    root = zarr.open_group(str(path), mode="w")
+    axes = [
+        {"name": "c", "type": "channel"},
+        {"name": "z", "type": "space"},
+        {"name": "y", "type": "space"},
+        {"name": "x", "type": "space"},
+    ]
+    write_image(
+        image=np.zeros((2, 4, 8, 8), dtype=np.uint8),
+        group=root,
+        axes=axes,
+        axes_units=SPATIAL_UNITS,
+    )
+    write_labels(
+        labels=np.zeros((1, 4, 8, 8), dtype=np.int8),
+        group=root,
+        name="lbl",
+        axes=axes,
+        axes_units=SPATIAL_UNITS,
+    )
+
+    layers = napari_get_reader(str(path))()
+    image = next(layer for layer in layers if layer[2] == "image")
+    label = next(layer for layer in layers if layer[2] == "labels")
+
+    # image: napari splits on the channel axis, so it drops to spatial axes only
+    assert image[1]["channel_axis"] == 0
+    assert image[1]["axis_labels"] == ("z", "y", "x")
+    assert image[1]["units"] == ("micrometer", "micrometer", "micrometer")
+
+    # label: not split, so the channel axis is retained and axis_labels length
+    # must equal the (4D) layer ndim
+    assert "channel_axis" not in label[1]
+    assert label[1]["axis_labels"] == ("c", "z", "y", "x")
+    assert len(label[1]["axis_labels"]) == label[0][0].ndim
+    # units are forwarded per-axis: the unit-less channel axis stays None so the
+    # spatial units still reach napari (otherwise the whole units tuple would be
+    # dropped and the label would be unit-inconsistent with the split images,
+    # suppressing the scale bar)
+    assert label[1]["units"] == (None, "micrometer", "micrometer", "micrometer")
+    assert len(label[1]["units"]) == label[0][0].ndim
+
+
 class TestPlates:
     @pytest.fixture(autouse=True)
     def initdir(self, tmp_path: Path):
@@ -174,6 +260,8 @@ class TestPlates:
             self.sizey * len(self.row_names),
             self.sizex * len(self.col_names),
         )
+        assert metadata["channel_axis"] == 0
+        assert metadata["axis_labels"] == ("z", "y", "x")
 
         # check plate compared with an Image
         well_path = self.plate_path / self.well_paths[0] / "0"
@@ -181,6 +269,7 @@ class TestPlates:
         assert len(img_layers) == 1
         img_layer = img_layers[0]
         img_data, img_metadata, img_layer_type = img_layer
+        assert img_metadata["axis_labels"] == ("z", "y", "x")
 
         # plate pyramid should have same number of resolutions as images
         assert len(img_data) == len(data)

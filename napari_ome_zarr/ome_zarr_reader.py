@@ -201,6 +201,17 @@ class Multiscales(Spec):
         paths = [ds["path"] for ds in attrs["multiscales"][0]["datasets"]]
         return [da.from_zarr(self.group[path]) for path in paths]
 
+    def _splits_channels(self) -> bool:
+        """Whether a channel axis is turned into separate napari layers.
+
+        Images split into one layer per channel via ``channel_axis``, so the
+        channel axis is dropped from the per-axis metadata (axis_labels, units,
+        scale, translate) to match each split layer's reduced ndim. Labels keep
+        every axis in a single layer and so must keep the channel axis (see
+        ``Label._splits_channels``).
+        """
+        return True
+
     def metadata(self) -> Dict[str, Any]:
         rsp: dict = {}
         attrs = Spec.get_attrs(self.group)
@@ -211,20 +222,40 @@ class Multiscales(Spec):
             # No axes (v0.1, v0.2), assume 5D (t,c,z,y,x)
             axes = attrs["multiscales"][0].get("axes", AXES_5D)
         atypes = []
+        anames: list[str | None] = []
+        aunits: list[str | None] = []
         for axis in axes:
             if isinstance(axis, str):
                 # v0.3
                 atypes.append(AXES_TYPES.get(axis.lower(), "space"))
+                anames.append(axis)
+                aunits.append(None)
             else:
                 atypes.append(axis.get("type", "space"))
+                anames.append(axis.get("name"))
+                aunits.append(axis.get("unit"))
         dataset_0 = attrs["multiscales"][0]["datasets"][0]
         img_name = attrs["multiscales"][0].get("name", "")
         img_name = img_name.rstrip("/")
         img_name = img_name.split("/")[-1] if "/" in img_name else img_name
         channel_axis = None
-        if "channel" in atypes:
+        if "channel" in atypes and self._splits_channels():
             channel_axis = atypes.index("channel")
             rsp["channel_axis"] = channel_axis
+            anames.pop(channel_axis)
+            aunits.pop(channel_axis)
+        if all(isinstance(n, str) and n for n in anames):
+            rsp["axis_labels"] = tuple(anames)
+        # Forward units per-axis, leaving axes without a unit (e.g. a retained
+        # channel axis on a label) as None rather than dropping the whole tuple.
+        # napari treats a None entry as its default (pixel); keeping the spatial
+        # units means label and split-image layers stay unit-consistent, so the
+        # scale bar still renders (napari warns "Inconsistent units across
+        # layers" and hides units when one layer lacks them).
+        if any(isinstance(u, str) and u for u in aunits):
+            rsp["units"] = tuple(
+                u if isinstance(u, str) and u else None for u in aunits
+            )
 
         transforms = []
 
@@ -250,6 +281,7 @@ class Multiscales(Spec):
                 ]
                 # These are alternative transforms (not a sequence) - pick the first
                 transforms.extend(from_intrinsic[:1])
+
         # compile all transforms into single Affine
         affine = transforms_to_affine(transforms, channel_axis)
         # some plugins find it useful to have the scale separate from the affine
@@ -515,7 +547,12 @@ class PlateLabels(Plate):
         image_group = well_group[first_field_path]
         labelimage_group = image_group["labels"][self.labels_path]
         m = Label(labelimage_group).metadata()
-        return {"scale": m.get("scale", None)}
+        rv: dict[str, Any] = {"scale": m.get("scale", None)}
+        if "axis_labels" in m:
+            rv["axis_labels"] = m["axis_labels"]
+        if "units" in m:
+            rv["units"] = m["units"]
+        return rv
 
 
 class Labels(Spec):
@@ -539,6 +576,12 @@ class Label(Multiscales):
         if not Multiscales.matches(group):
             return False
         return "image-label" in Spec.get_attrs(group)
+
+    def _splits_channels(self) -> bool:
+        # A label is loaded as a single layer keeping all axes (no per-channel
+        # split), so the channel axis must be retained in the per-axis metadata
+        # to match the layer ndim.
+        return False
 
     def add_parent_transform(
         self, transform: Dict[str, Any], parent_channel_axis: int | None
