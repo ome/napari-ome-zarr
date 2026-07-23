@@ -1,6 +1,7 @@
 import napari
 from skimage import data
 
+
 def test_write_05_ome_zarr():
     viewer = napari.Viewer()
     image = data.human_mitosis()
