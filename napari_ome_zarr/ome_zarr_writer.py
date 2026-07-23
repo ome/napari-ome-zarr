@@ -38,7 +38,7 @@ def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
     img_ms = OMEZarrMultiscale(
         image=img,
         contrast_limits=[attributes.get("contrast_limits", None)],
-        channel_colors=[[int(c*255) for c in rgba]]
+        channel_colors=[[int(c * 255) for c in rgba]],
     )
     jobs = img_ms.to_ome_zarr(path, overwrite=True, compute=False)
 
