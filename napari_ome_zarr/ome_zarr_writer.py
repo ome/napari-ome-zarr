@@ -1,10 +1,12 @@
+import time
 from typing import Any
+
 import numpy as np
-from ome_zarr import OMEZarrImage, OMEZarrMultiscale
+from napari.qt import create_worker
 from napari.qt.threading import thread_worker
 from napari.utils import progress
-from napari.qt import create_worker
-import time
+from ome_zarr import OMEZarrImage, OMEZarrMultiscale
+
 
 def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
 
