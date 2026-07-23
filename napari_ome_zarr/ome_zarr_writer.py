@@ -9,6 +9,7 @@ import time
 def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
 
     axes = "tzyx"
+    axes = axes[-len(layer_data.shape) :]
 
     # check if first color is black - this indicates a non-inverted colormap
     first_color = attributes["colormap"]["colors"][0]
@@ -18,7 +19,6 @@ def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
         rgba = np.asarray(first_color)
 
     if not attributes.get("multiscale", False):
-        axes = axes[-len(layer_data.shape) :]
         img = OMEZarrImage(
             data=layer_data,
             axes=axes,
@@ -26,21 +26,27 @@ def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
             name=attributes.get("name", "image"),
         )
 
-        img_ms = OMEZarrMultiscale(
-            image=img,
-            contrast_limits=[attributes.get("contrast_limits", None)],
-            channel_colors=[[int(c*255) for c in rgba]]
+    else:
+        img = OMEZarrImage(
+            data=layer_data[0],
+            axes=axes,
+            scale={d: float(attributes["scale"][i]) for i, d in enumerate(axes)},
+            name=attributes.get("name", "image"),
         )
+    img_ms = OMEZarrMultiscale(
+        image=img,
+        contrast_limits=[attributes.get("contrast_limits", None)],
+        channel_colors=[[int(c*255) for c in rgba]]
+    )
+    jobs = img_ms.to_ome_zarr(path, overwrite=True, compute=False)
 
-        jobs = img_ms.to_ome_zarr(path, overwrite=True, compute=False)
+    @thread_worker(progress={"total": len(jobs)})
+    def save_pyramid_layers(jobs):
+        for job in jobs:
+            job.compute()
+            yield
 
-        @thread_worker(progress={"total": len(jobs)})
-        def save_pyramid_layers(jobs):
-            for job in jobs:
-                job.compute()
-                yield
-
-        save_pyramid_layers(jobs).start()
+    save_pyramid_layers(jobs).start()
 
     # return path to any file(s) that were successfully written
     return [path]
