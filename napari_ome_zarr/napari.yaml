@@ -6,9 +6,18 @@ contributions:
     - id: napari-ome-zarr.get_reader
       title: Get Reader
       python_name: napari_ome_zarr._reader:napari_get_reader
+    - id: napari-ome-zarr.write_05_ome_zarr
+      title: Write OME-Zarr
+      python_name: napari_ome_zarr.ome_zarr_writer:write_05_ome_zarr
   readers:
     - command: napari-ome-zarr.get_reader
       filename_patterns:
         - "*.zarr"
         - "*.zarr*"
       accepts_directories: true
+  writers:
+    - command: napari-ome-zarr.write_05_ome_zarr
+      layer_types:
+      - image
+      filename_extensions:
+      - .zarr
