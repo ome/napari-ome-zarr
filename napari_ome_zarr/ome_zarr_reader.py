@@ -6,13 +6,12 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
-from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
-
 import dask.array as da
 import numpy as np
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from napari.utils.transforms import Affine
+from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
 from zarr import Group
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import SyncMixin
@@ -101,15 +100,17 @@ def single_transform_to_affine(transform: Dict[str, Any]) -> Affine:
         aff = Affine(affine_matrix=affine_matrix)
     return aff
 
+
 def _ome_zarr_ms_to_layer_props(
-        multiscales: OMEZarrMultiscale | OMEZarrLabels,
-        channel_index: int | None
+    multiscales: OMEZarrMultiscale | OMEZarrLabels, channel_index: int | None
 ) -> Dict[str, Any]:
 
     # get scale (same for all channels)
     s = list(multiscales.images[0].scale.values())
-    scale = s[:channel_index] + s[channel_index+1:] if channel_index is not None else s
-    
+    scale = (
+        s[:channel_index] + s[channel_index + 1 :] if channel_index is not None else s
+    )
+
     props: Dict[str, Any] = {}
     props["units"] = list(multiscales.images[0].axes_units.values())
     props["axis_labels"] = [ax for ax in multiscales.images[0].axes if ax != "c"]
@@ -602,14 +603,14 @@ class Label(Multiscales):
         return "image-label" in Spec.get_attrs(group)
 
     def to_layer_data(self) -> List[LayerData]:
-        from ome_zarr import OMEZarrLabels
         import pandas as pd
+        from ome_zarr import OMEZarrLabels
+
         ms = OMEZarrLabels.from_ome_zarr(self.group)
 
         has_channel = "c" in ms.images[0].axes
         channel_index = ms.images[0].axes.index("c") if has_channel else None
         n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
-
 
         labels_layers: List[LayerData] = []
         for ch_idx in range(n_channels):
@@ -624,12 +625,14 @@ class Label(Multiscales):
 
             # get color settings if present
             if hasattr(ms, "image_label") and hasattr(ms.image_label, "colors"):
-                props["colormap"] = [np.asarray(c.rgba) / 255.0 for c in ms.image_label.colors]
-            
+                props["colormap"] = [
+                    np.asarray(c.rgba) / 255.0 for c in ms.image_label.colors
+                ]
+
             if hasattr(ms, "image_label") and hasattr(ms.image_label, "properties"):
                 features = pd.DataFrame(
                     [f.model_dump() for f in ms.image_label.properties]
-                    )
+                )
 
                 if "label_value" in features.columns:
                     features.sort_values(by="label_value", inplace=True)
