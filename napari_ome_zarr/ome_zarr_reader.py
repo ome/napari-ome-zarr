@@ -6,6 +6,8 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
+from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
+
 import dask.array as da
 import numpy as np
 import zarr
@@ -98,6 +100,21 @@ def single_transform_to_affine(transform: Dict[str, Any]) -> Affine:
         affine_matrix[:-1, :] = matrix
         aff = Affine(affine_matrix=affine_matrix)
     return aff
+
+def _ome_zarr_ms_to_layer_props(
+        multiscales: OMEZarrMultiscale | OMEZarrLabels,
+        channel_index: int | None
+) -> Dict[str, Any]:
+
+    # get scale (same for all channels)
+    s = list(multiscales.images[0].scale.values())
+    scale = s[:channel_index] + s[channel_index+1:] if channel_index is not None else s
+    
+    props: Dict[str, Any] = {}
+    props["units"] = list(multiscales.images[0].axes_units.values())
+    props["axis_labels"] = [ax for ax in multiscales.images[0].axes if ax != "c"]
+    props["scale"] = scale
+    return props
 
 
 def transforms_to_affine(
@@ -361,7 +378,7 @@ class Bioformats2raw(Spec):
                 image_path = node_id.replace("Image:", "")
                 g = self.group[image_path]
                 if Multiscales.matches(g):
-                    rv.append(Multiscales(g))
+                    rv.extend(Multiscales(g).to_layer_data())
         return rv
 
     # override to NOT yield self since node has no data
@@ -404,6 +421,13 @@ class Scene(Spec):
     def matches(group: Group) -> bool:
         attrs = Spec.get_attrs(group)
         return "scene" in attrs
+
+    def to_layer_data(self) -> List[LayerData]:
+        layers: List[LayerData] = []
+        scene = OMEZarrScene.from_ome_zarr(self.group)
+        for key in scene.images.keys():
+            layers.extend(Multiscales(self.group[key]).to_layer_data())
+        return layers
 
     def add_transforms_from_image(self, image_path: str, transforms: dict) -> None:
         image_attrs = Spec.get_attrs(self.group[image_path])
@@ -577,6 +601,44 @@ class Label(Multiscales):
             return False
         return "image-label" in Spec.get_attrs(group)
 
+    def to_layer_data(self) -> List[LayerData]:
+        from ome_zarr import OMEZarrLabels
+        import pandas as pd
+        ms = OMEZarrLabels.from_ome_zarr(self.group)
+
+        has_channel = "c" in ms.images[0].axes
+        channel_index = ms.images[0].axes.index("c") if has_channel else None
+        n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
+
+
+        labels_layers: List[LayerData] = []
+        for ch_idx in range(n_channels):
+            data = (
+                [da.take(img.data, ch_idx, axis=channel_index) for img in ms.images]
+                if has_channel
+                else [img.data for img in ms.images]
+            )
+
+            props = _ome_zarr_ms_to_layer_props(ms, channel_index)
+            props["name"] = ms.name
+
+            # get color settings if present
+            if hasattr(ms, "image_label") and hasattr(ms.image_label, "colors"):
+                props["colormap"] = [np.asarray(c.rgba) / 255.0 for c in ms.image_label.colors]
+            
+            if hasattr(ms, "image_label") and hasattr(ms.image_label, "properties"):
+                features = pd.DataFrame(
+                    [f.model_dump() for f in ms.image_label.properties]
+                    )
+
+                if "label_value" in features.columns:
+                    features.sort_values(by="label_value", inplace=True)
+                props["features"] = features
+
+            labels_layers.extend([(data, props, "labels")])
+
+        return labels_layers
+
     def _splits_channels(self) -> bool:
         # A label is loaded as a single layer keeping all axes (no per-channel
         # split), so the channel axis must be retained in the per-axis metadata
@@ -663,7 +725,7 @@ class Label(Multiscales):
 
 def read_ome_zarr(root_group: Group) -> Callable:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
-        results: List[LayerData] = list()
+        layers: List[LayerData] = list()
 
         print("Root group", root_group.attrs.asdict())
 
@@ -701,22 +763,8 @@ def read_ome_zarr(root_group: Group) -> Callable:
         if spec:
             nodes = list(spec.iter_nodes())
             for node in nodes:
-                node_data = node.data()
-                metadata = node.metadata()
-                layer_type = "image"
-                if Label.matches(node.group) or isinstance(node, PlateLabels):
-                    layer_type = "labels"
-                    # napari "labels" layer MUST not have "channel_axis"
-                    if "channel_axis" in metadata:
-                        ch_axis = metadata.pop("channel_axis")
-                        # also splice out channel_axis from node_data if present
-                        for level in range(len(node_data)):
-                            darray = node_data[level]
-                            if darray.ndim > ch_axis:
-                                node_data[level] = da.squeeze(darray, axis=ch_axis)
-                rv: LayerData = (node_data, metadata, layer_type)
-                results.append(rv)
+                layers.extend(node.to_layer_data())
 
-        return results
+        return layers
 
     return f
