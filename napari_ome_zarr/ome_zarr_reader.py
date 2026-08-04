@@ -462,8 +462,9 @@ class Scene(Spec):
         else:
             first_image_key = list(scene.images.keys())[0]
             first_image = scene.images[first_image_key]
-            target_coordinate_system = f"{first_image_key}:{first_image.metadata.coordinateSystems[0].name}"
-
+            target_coordinate_system = (
+                f"{first_image_key}:{first_image.metadata.coordinateSystems[0].name}"
+            )
 
         for key in scene.images.keys():
 
@@ -471,11 +472,15 @@ class Scene(Spec):
             ms = OMEZarrMultiscale.from_ome_zarr(self.group[key])
 
             # traverse graph into target coordinate system
-            input_cs = f"{key}:{scene.images[key].metadata.intrinsic_coordinate_system.name}"
+            input_cs = (
+                f"{key}:{scene.images[key].metadata.intrinsic_coordinate_system.name}"
+            )
             seq = scene._graph.get_sequence(input_cs, target_coordinate_system)
             affine = seq.simplify().to_affine().matrix
 
-            axis_index = ms.images[0].axes.index("c") if "c" in ms.images[0].axes else None
+            axis_index = (
+                ms.images[0].axes.index("c") if "c" in ms.images[0].axes else None
+            )
             if axis_index is not None:
                 # remove channel axis from affine matrix
                 affine = np.delete(affine, axis_index, 0)
@@ -487,7 +492,6 @@ class Scene(Spec):
                 l_props["affine"] = affine
                 updated_layers.append((l[0], l_props, l[2]))
             layers.extend(updated_layers)
-
 
         return layers
 
@@ -692,7 +696,7 @@ class Label(Multiscales):
                 for idx in range(len(ms.image_label.colors)):
                     val = ms.image_label.colors[idx].label_value
                     rgba = ms.image_label.colors[idx].rgba
-                    colors.append(([x / 255 for x in rgba]))
+                    colors.append([x / 255 for x in rgba])
                     values.append(val)
 
                 if 0 not in values:
@@ -702,10 +706,10 @@ class Label(Multiscales):
                     props["colormap"] = colors
 
             if (
-                hasattr(ms, "image_label") 
+                hasattr(ms, "image_label")
                 and hasattr(ms.image_label, "properties")
                 and ms.image_label.properties is not None
-                ):
+            ):
                 features = pd.DataFrame(
                     [f.model_dump() for f in ms.image_label.properties]
                 )
