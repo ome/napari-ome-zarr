@@ -193,6 +193,35 @@ class Multiscales(Spec):
     def matches(group: Group) -> bool:
         return "multiscales" in Spec.get_attrs(group)
 
+    def to_layer_data(self) -> List[LayerData]:
+        ms = OMEZarrMultiscale.from_ome_zarr(self.group)
+
+        data = [img.data for img in ms.images]
+
+        has_channel = "c" in ms.images[0].axes
+        channel_index = ms.images[0].axes.index("c") if has_channel else None
+        n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
+
+        layers: List[LayerData] = []
+        for ch_idx in range(n_channels):
+            data = (
+                [da.take(img.data, ch_idx, axis=channel_index) for img in ms.images]
+                if has_channel
+                else [img.data for img in ms.images]
+            )
+
+            props = _ome_zarr_ms_to_layer_props(ms, channel_index)
+            props["name"] = ms.name
+
+            layers.extend([(data, props, "image")])
+
+        if ms.labels is not None:
+            for label_key in ms.labels.keys():
+                label_spec = Label(self.group[f"labels/{label_key}"])
+                layers.extend(label_spec.to_layer_data())
+
+        return layers
+
     def children(self) -> list[Spec]:
         ch: list[Spec] = []
         # test for child "labels"
@@ -426,8 +455,40 @@ class Scene(Spec):
     def to_layer_data(self) -> List[LayerData]:
         layers: List[LayerData] = []
         scene = OMEZarrScene.from_ome_zarr(self.group)
+
+        target_coordinate_system: str | None = None
+        if scene.coordinate_systems is not None:
+            target_coordinate_system = f":{scene.coordinate_systems[0].name}"
+        else:
+            first_image_key = list(scene.images.keys())[0]
+            first_image = scene.images[first_image_key]
+            target_coordinate_system = f"{first_image_key}:{first_image.metadata.coordinateSystems[0].name}"
+
+
         for key in scene.images.keys():
-            layers.extend(Multiscales(self.group[key]).to_layer_data())
+
+            _layers = Multiscales(self.group[key]).to_layer_data()
+            ms = OMEZarrMultiscale.from_ome_zarr(self.group[key])
+
+            # traverse graph into target coordinate system
+            input_cs = f"{key}:{scene.images[key].metadata.intrinsic_coordinate_system.name}"
+            seq = scene._graph.get_sequence(input_cs, target_coordinate_system)
+            affine = seq.simplify().to_affine().matrix
+
+            axis_index = ms.images[0].axes.index("c") if "c" in ms.images[0].axes else None
+            if axis_index is not None:
+                # remove channel axis from affine matrix
+                affine = np.delete(affine, axis_index, 0)
+                affine = np.delete(affine, axis_index, 1)
+
+            updated_layers = []
+            for l in _layers:
+                l_props = l[1]
+                l_props["affine"] = affine
+                updated_layers.append((l[0], l_props, l[2]))
+            layers.extend(updated_layers)
+
+
         return layers
 
     def add_transforms_from_image(self, image_path: str, transforms: dict) -> None:
@@ -625,11 +686,26 @@ class Label(Multiscales):
 
             # get color settings if present
             if hasattr(ms, "image_label") and hasattr(ms.image_label, "colors"):
-                props["colormap"] = [
-                    np.asarray(c.rgba) / 255.0 for c in ms.image_label.colors
-                ]
 
-            if hasattr(ms, "image_label") and hasattr(ms.image_label, "properties"):
+                colors = []
+                values = []
+                for idx in range(len(ms.image_label.colors)):
+                    val = ms.image_label.colors[idx].label_value
+                    rgba = ms.image_label.colors[idx].rgba
+                    colors.append(([x / 255 for x in rgba]))
+                    values.append(val)
+
+                if 0 not in values:
+                    # add default color for background (0)
+                    colors.insert(0, [0, 0, 0, 0])
+                if len(colors) > 0:
+                    props["colormap"] = colors
+
+            if (
+                hasattr(ms, "image_label") 
+                and hasattr(ms.image_label, "properties")
+                and ms.image_label.properties is not None
+                ):
                 features = pd.DataFrame(
                     [f.model_dump() for f in ms.image_label.properties]
                 )
@@ -764,9 +840,7 @@ def read_ome_zarr(root_group: Group) -> Callable:
             print("No matching spec", root_group)
 
         if spec:
-            nodes = list(spec.iter_nodes())
-            for node in nodes:
-                layers.extend(node.to_layer_data())
+            layers.extend(spec.to_layer_data())
 
         return layers
 
