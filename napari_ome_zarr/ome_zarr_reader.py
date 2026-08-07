@@ -149,6 +149,7 @@ class Multiscales(Spec):
         """
         return True
 
+
 class Bioformats2raw(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -206,7 +207,10 @@ class Scene(Spec):
         else:
             # Pick image with highest dimensionality to avoid projecting down
             key_with_max_axes = max(all_cs.keys(), key=lambda k: len(all_cs[k][0].axes))
-            target_coordinate_system = (key_with_max_axes, all_cs[key_with_max_axes][0].name)
+            target_coordinate_system = (
+                key_with_max_axes,
+                all_cs[key_with_max_axes][0].name,
+            )
 
         for key in scene.images.keys():
 
@@ -214,7 +218,10 @@ class Scene(Spec):
             ms = OMEZarrMultiscale.from_ome_zarr(self.group[key])
 
             # traverse graph into target coordinate system
-            input_cs = (key, scene.images[key].metadata.intrinsic_coordinate_system.name)
+            input_cs = (
+                key,
+                scene.images[key].metadata.intrinsic_coordinate_system.name,
+            )
             seq = scene._graph.get_sequence(input_cs, target_coordinate_system)
             affine = seq.simplify().to_affine().matrix
 
@@ -235,10 +242,7 @@ class Scene(Spec):
             )
 
             # Common case: both have channel at same index, matrix is square
-            if (
-                input_ch_idx is not None
-                and affine.shape[0] == affine.shape[1]
-            ):
+            if input_ch_idx is not None and affine.shape[0] == affine.shape[1]:
                 affine = np.delete(affine, input_ch_idx, axis=0)
                 affine = np.delete(affine, input_ch_idx, axis=1)
                 for lyr in _layers:
@@ -255,7 +259,7 @@ class Scene(Spec):
 
             # Check for spatial dimension mismatch after channel removal
             n_out = affine.shape[0] - 1  # excl homogeneous row
-            n_in = affine.shape[1] - 1   # excl homogeneous col
+            n_in = affine.shape[1] - 1  # excl homogeneous col
             input_axes = ms.images[0].axes
             n_data_spatial = len([a for a in input_axes if a != "c"])
 
@@ -270,15 +274,24 @@ class Scene(Spec):
 
                 n_extra = n_out - n_in
                 for idx, lyr in enumerate(_layers):
-                    data_expanded = [da.expand_dims(arr, axis=tuple(range(n_extra))) for arr in lyr[0]]
+                    data_expanded = [
+                        da.expand_dims(arr, axis=tuple(range(n_extra)))
+                        for arr in lyr[0]
+                    ]
                     props_expanded = lyr[1].copy()
 
                     # we need to update the layer properties to match the new data shape.
-                    props_expanded["scale"] = props_expanded["scale"][-1] + props_expanded["scale"]
-                    props_expanded["axis_labels"] = [ax.name for ax in output_cs_axes if ax.type != "channel"]
-                    props_expanded["units"] = [props_expanded["units"][-1]] + props_expanded["units"] 
+                    props_expanded["scale"] = (
+                        props_expanded["scale"][-1] + props_expanded["scale"]
+                    )
+                    props_expanded["axis_labels"] = [
+                        ax.name for ax in output_cs_axes if ax.type != "channel"
+                    ]
+                    props_expanded["units"] = [
+                        props_expanded["units"][-1]
+                    ] + props_expanded["units"]
                     _layers[idx] = (data_expanded, props_expanded, lyr[2])
-                
+
             elif n_out < n_in:
                 # ponytail: transform removes spatial dims - unusual, warn and
                 # use identity. Add projection support when a real case appears.
@@ -286,13 +299,14 @@ class Scene(Spec):
                     f"Transform reduces dims ({n_in} -> {n_out}), using identity"
                 )
                 affine = np.eye(n_data_spatial + 1)
-                # also need to prepend the name of the added dim to 
+                # also need to prepend the name of the added dim to
 
             for lyr in _layers:
                 lyr[1]["affine"] = affine
             layers.extend(_layers)
 
         return layers
+
 
 class Plate(Spec):
     @staticmethod
