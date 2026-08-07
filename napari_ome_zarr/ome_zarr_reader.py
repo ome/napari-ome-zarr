@@ -49,58 +49,6 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     return custom_cmap
 
 
-def remove_axis_from_transform(transform: Dict[str, Any], axis: int) -> Dict[str, Any]:
-    """Remove a specific axis from an OME-Zarr transform dict."""
-    new_transform = transform.copy()
-    if transform["type"] == "scale":
-        new_scale = transform["scale"][:]
-        del new_scale[axis]
-        new_transform["scale"] = new_scale
-    if transform["type"] == "translation":
-        new_translation = transform["translation"][:]
-        del new_translation[axis]
-        new_transform["translation"] = new_translation
-    if transform["type"] == "rotation":
-        matrix = np.array(transform["rotation"])
-        matrix = np.delete(matrix, axis, 0)  # remove row
-        matrix = np.delete(matrix, axis, 1)  # remove column
-        new_transform["rotation"] = matrix.tolist()
-    if transform["type"] == "affine":
-        matrix = np.array(transform["affine"])
-        matrix = np.delete(matrix, axis, 0)  # remove row
-        matrix = np.delete(matrix, axis, 1)  # remove column
-        new_transform["affine"] = matrix.tolist()
-    if transform["type"] == "sequence":
-        new_transforms = []
-        for sub_transform in transform["transformations"]:
-            new_sub_transform = remove_axis_from_transform(sub_transform, axis)
-            new_transforms.append(new_sub_transform)
-        new_transform["transformations"] = new_transforms
-    return new_transform
-
-
-def single_transform_to_affine(transform: Dict[str, Any]) -> Affine:
-    """Convert a single OME-Zarr transform dict to an Affine object."""
-    aff: Affine = None
-    if transform["type"] == "scale":
-        aff = Affine(scale=transform["scale"])
-    elif transform["type"] == "translation":
-        aff = Affine(translate=transform["translation"])
-    elif transform["type"] == "rotation":
-        matrix = np.array(transform["rotation"])
-        # Spec says that "rotation" matrix is (N)x(N). We want (N+1)x(N+1)
-        affine_matrix = np.eye(matrix.shape[0] + 1)
-        affine_matrix[:-1, :-1] = matrix
-        aff = Affine(affine_matrix=affine_matrix)
-    elif transform["type"] == "affine":
-        matrix = np.array(transform["affine"])
-        # Spec says that "affine" matrix is (M)x(N+1). We want (M+1)x(N+1)
-        affine_matrix = np.eye(matrix.shape[0] + 1)
-        affine_matrix[:-1, :] = matrix
-        aff = Affine(affine_matrix=affine_matrix)
-    return aff
-
-
 def _ome_zarr_ms_to_layer_props(
     multiscales: OMEZarrMultiscale | OMEZarrLabels, channel_index: int | None
 ) -> Dict[str, Any]:
@@ -112,43 +60,11 @@ def _ome_zarr_ms_to_layer_props(
     )
 
     props: Dict[str, Any] = {}
-    props["units"] = list(multiscales.images[0].axes_units.values())
+    if multiscales.images[0].axes_units:
+        props["units"] = list(multiscales.images[0].axes_units.values())
     props["axis_labels"] = [ax for ax in multiscales.images[0].axes if ax != "c"]
     props["scale"] = scale
     return props
-
-
-def transforms_to_affine(
-    transforms: List[Dict[str, Any]], channel_axis: int | None
-) -> Affine:
-    # first unwrap and flatten any 'sequence' transforms...
-    # NB: if any 'sequence' contains another 'sequence' this is ignored.
-    flat_transforms: List[Dict[str, Any]] = []
-    for transf in transforms:
-        if transf["type"] == "sequence":
-            flat_transforms.extend(transf["transformations"])
-        else:
-            flat_transforms.append(transf)
-
-    # Don't create Affine until we know dimensions...
-    aff: Affine = None
-    for transf in flat_transforms:
-        # print("transforms_to_affine..........ch,transf", channel_axis, transf)
-        trans_aff = single_transform_to_affine(transf)
-        if trans_aff is None:
-            warnings.warn(f"Unsupported transform type: {transf['type']}")
-            continue
-        if aff is None:
-            aff = trans_aff
-        elif trans_aff is not None:
-            aff = trans_aff.compose(aff)
-    # finally, remove channel axis from 2D matrix
-    if channel_axis is not None:
-        matrix = aff.affine_matrix
-        for dim in (0, 1):
-            matrix = np.delete(matrix, channel_axis, dim)
-        aff = Affine(affine_matrix=matrix)
-    return aff
 
 
 class Spec(ABC):
@@ -222,32 +138,6 @@ class Multiscales(Spec):
 
         return layers
 
-    def children(self) -> list[Spec]:
-        ch: list[Spec] = []
-        # test for child "labels"
-        try:
-            grp = self.group["labels"]
-            attrs = Spec.get_attrs(grp)
-            if "labels" in attrs:
-                for name in attrs["labels"]:
-                    g = grp[name]
-                    if Label.matches(g):
-                        label_image = Label(g)
-                        # Label inherits parent transforms...
-                        ch_axis = self.metadata().get("channel_axis", None)
-                        for transf in self.parent_transforms:
-                            # ...to transform it to same space as parent image
-                            label_image.add_parent_transform(transf, ch_axis)
-                        ch.append(label_image)
-        except KeyError:
-            pass
-        return ch
-
-    def data(self) -> list[da.core.Array]:
-        attrs = Spec.get_attrs(self.group)
-        paths = [ds["path"] for ds in attrs["multiscales"][0]["datasets"]]
-        return [da.from_zarr(self.group[path]) for path in paths]
-
     def _splits_channels(self) -> bool:
         """Whether a channel axis is turned into separate napari layers.
 
@@ -258,132 +148,6 @@ class Multiscales(Spec):
         ``Label._splits_channels``).
         """
         return True
-
-    def metadata(self) -> Dict[str, Any]:
-        rsp: dict = {}
-        attrs = Spec.get_attrs(self.group)
-        # For v0.6+ simply use first coordinateSystem axes...
-        if "coordinateSystems" in attrs["multiscales"][0]:
-            axes = attrs["multiscales"][0]["coordinateSystems"][0]["axes"]
-        else:
-            # No axes (v0.1, v0.2), assume 5D (t,c,z,y,x)
-            axes = attrs["multiscales"][0].get("axes", AXES_5D)
-        atypes = []
-        anames: list[str | None] = []
-        aunits: list[str | None] = []
-        for axis in axes:
-            if isinstance(axis, str):
-                # v0.3
-                atypes.append(AXES_TYPES.get(axis.lower(), "space"))
-                anames.append(axis)
-                aunits.append(None)
-            else:
-                atypes.append(axis.get("type", "space"))
-                anames.append(axis.get("name"))
-                aunits.append(axis.get("unit"))
-        dataset_0 = attrs["multiscales"][0]["datasets"][0]
-        img_name = attrs["multiscales"][0].get("name", "")
-        img_name = img_name.rstrip("/")
-        img_name = img_name.split("/")[-1] if "/" in img_name else img_name
-        channel_axis = None
-        if "channel" in atypes and self._splits_channels():
-            channel_axis = atypes.index("channel")
-            rsp["channel_axis"] = channel_axis
-            anames.pop(channel_axis)
-            aunits.pop(channel_axis)
-        if all(isinstance(n, str) and n for n in anames):
-            rsp["axis_labels"] = tuple(anames)
-        # Forward units per-axis, leaving axes without a unit (e.g. a retained
-        # channel axis on a label) as None rather than dropping the whole tuple.
-        # napari treats a None entry as its default (pixel); keeping the spatial
-        # units means label and split-image layers stay unit-consistent, so the
-        # scale bar still renders (napari warns "Inconsistent units across
-        # layers" and hides units when one layer lacks them).
-        if any(isinstance(u, str) and u for u in aunits):
-            rsp["units"] = tuple(
-                u if isinstance(u, str) and u else None for u in aunits
-            )
-
-        transforms = []
-
-        # if we have "graph" of transforms from scene...
-        if len(self.parent_transforms) > 0:
-            transforms.extend(self.parent_transforms)
-        else:
-            # First we handle (single) transform from datasets[0]...
-            # NB: older versions may not have dataset.coordinateTransformations
-            ds_transforms = dataset_0.get("coordinateTransformations", [])
-            intrinsic_name = None
-            if len(ds_transforms) > 0:
-                ds_transform = ds_transforms[0]
-                transforms.append(ds_transform)
-                # we only get intrinsic_name from v0.6 data
-                intrinsic_name = ds_transform.get("output", {}).get("name", None)
-            # Then check for transformations at top level, with "input" of intrinsic
-            if "coordinateTransformations" in attrs["multiscales"][0]:
-                from_intrinsic = [
-                    t
-                    for t in attrs["multiscales"][0]["coordinateTransformations"]
-                    if t.get("input", {}).get("name", None) == intrinsic_name
-                ]
-                # These are alternative transforms (not a sequence) - pick the first
-                transforms.extend(from_intrinsic[:1])
-
-        # compile all transforms into single Affine
-        affine = transforms_to_affine(transforms, channel_axis)
-        # some plugins find it useful to have the scale separate from the affine
-        rsp["scale"] = affine.scale.tolist()
-        # undo the scale component of the affine (so we don't duplicate it)
-        affine.scale = np.ones(len(affine.scale))
-        rsp["affine"] = affine
-
-        if "omero" in attrs:
-            colormaps = []
-            ch_names = []
-            visibles = []
-            contrast_limits: list[list[int]] = []
-            model = attrs["omero"].get("rdefs", {}).get("model", "unset")
-            greyscale = model == "greyscale"
-
-            for index, ch in enumerate(attrs["omero"]["channels"]):
-                color = ch.get("color", None)
-                if color is not None:
-                    rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
-                    if greyscale:
-                        rgb = [1, 1, 1]
-                    # colormap is range: black -> rgb color
-                    cm = Colormap([[0, 0, 0], rgb])
-                    # Try to match colormap to an existing napari colormap
-                    cm = _match_colors_to_available_colormap(cm)
-                    colormaps.append(cm)
-                ch_name = ch.get("label", f"channel_{index}")
-                ch_names.append(img_name and f"{img_name}: {ch_name}" or ch_name)
-                visibles.append(ch.get("active", True))
-
-                window = ch.get("window", None)
-                if window is not None:
-                    start = window.get("start", None)
-                    end = window.get("end", None)
-                    if start is not None and end is not None:
-                        # skip if None. Otherwise check no previous skip
-                        if len(contrast_limits) == index:
-                            contrast_limits.append([start, end])
-
-            if rsp.get("channel_axis") is not None:
-                rsp["colormap"] = colormaps
-                rsp["name"] = ch_names
-                if len(contrast_limits) > 0:
-                    rsp["contrast_limits"] = contrast_limits
-                rsp["visible"] = visibles
-            else:
-                rsp["colormap"] = colormaps[0]
-                rsp["name"] = ch_names[0]
-                if len(contrast_limits) > 0:
-                    rsp["contrast_limits"] = contrast_limits[0]
-                rsp["visible"] = visibles[0]
-
-        return rsp
-
 
 class Bioformats2raw(Spec):
     @staticmethod
@@ -425,27 +189,6 @@ def cs_path_name(in_out: dict) -> str:
     return name
 
 
-def iter_graph(
-    path_name: str | None,
-    parent_trans: list[Dict[str, Any]],
-    transforms: Dict[str, List[Dict[str, Any]]],
-) -> Iterable[list[Dict[str, Any]]]:
-    # find list of child transforms that output to this node
-    if path_name is None:
-        yield parent_trans
-        return
-    node_transfs = transforms.get(path_name)
-    if node_transfs is None:
-        yield parent_trans
-    else:
-        for transf in node_transfs:
-            parents_copy = parent_trans[:]
-            parents_copy.append(transf)
-            yield from iter_graph(
-                transf.get("input_full_path"), parents_copy, transforms
-            )
-
-
 class Scene(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -455,16 +198,15 @@ class Scene(Spec):
     def to_layer_data(self) -> List[LayerData]:
         layers: List[LayerData] = []
         scene = OMEZarrScene.from_ome_zarr(self.group)
+        all_cs = scene.get_coordinate_system()
 
-        target_coordinate_system: str | None = None
-        if scene.coordinate_systems is not None:
-            target_coordinate_system = f":{scene.coordinate_systems[0].name}"
+        target_coordinate_system: tuple[str, str] | None = None
+        if "" in all_cs:
+            target_coordinate_system = ("", all_cs[""][0].name)
         else:
-            first_image_key = list(scene.images.keys())[0]
-            first_image = scene.images[first_image_key]
-            target_coordinate_system = (
-                f"{first_image_key}:{first_image.metadata.coordinateSystems[0].name}"
-            )
+            # Pick image with highest dimensionality to avoid projecting down
+            key_with_max_axes = max(all_cs.keys(), key=lambda k: len(all_cs[k][0].axes))
+            target_coordinate_system = (key_with_max_axes, all_cs[key_with_max_axes][0].name)
 
         for key in scene.images.keys():
 
@@ -472,118 +214,85 @@ class Scene(Spec):
             ms = OMEZarrMultiscale.from_ome_zarr(self.group[key])
 
             # traverse graph into target coordinate system
-            input_cs = (
-                f"{key}:{scene.images[key].metadata.intrinsic_coordinate_system.name}"
-            )
+            input_cs = (key, scene.images[key].metadata.intrinsic_coordinate_system.name)
             seq = scene._graph.get_sequence(input_cs, target_coordinate_system)
             affine = seq.simplify().to_affine().matrix
 
-            axis_index = (
-                ms.images[0].axes.index("c") if "c" in ms.images[0].axes else None
+            # Get axes of input and output coordinate systems to find channel axes
+            input_cs_obj = scene.get_coordinate_system(input_cs[0], input_cs[1])
+            input_cs_axes = input_cs_obj[input_cs[0]][0].axes
+            output_cs_obj = scene.get_coordinate_system(
+                target_coordinate_system[0], target_coordinate_system[1]
             )
-            if axis_index is not None:
-                # remove channel axis from affine matrix
-                affine = np.delete(affine, axis_index, 0)
-                affine = np.delete(affine, axis_index, 1)
+            output_cs_axes = output_cs_obj[target_coordinate_system[0]][0].axes
 
-            updated_layers = []
-            for l in _layers:
-                l_props = l[1]
-                l_props["affine"] = affine
-                updated_layers.append((l[0], l_props, l[2]))
-            layers.extend(updated_layers)
+            # Find channel axis indices in input/output coordinate systems
+            input_ch_idx = next(
+                (i for i, ax in enumerate(input_cs_axes) if ax.type == "channel"), None
+            )
+            output_ch_idx = next(
+                (i for i, ax in enumerate(output_cs_axes) if ax.type == "channel"), None
+            )
+
+            # Common case: both have channel at same index, matrix is square
+            if (
+                input_ch_idx is not None
+                and affine.shape[0] == affine.shape[1]
+            ):
+                affine = np.delete(affine, input_ch_idx, axis=0)
+                affine = np.delete(affine, input_ch_idx, axis=1)
+                for lyr in _layers:
+                    lyr[1]["affine"] = affine
+                layers.extend(_layers)
+                continue
+
+            # Remove channel row/column independently (handles dimension changes)
+            # Row = output axis, Column = input axis
+            if output_ch_idx is not None:
+                affine = np.delete(affine, output_ch_idx, axis=0)
+            if input_ch_idx is not None:
+                affine = np.delete(affine, input_ch_idx, axis=1)
+
+            # Check for spatial dimension mismatch after channel removal
+            n_out = affine.shape[0] - 1  # excl homogeneous row
+            n_in = affine.shape[1] - 1   # excl homogeneous col
+            input_axes = ms.images[0].axes
+            n_data_spatial = len([a for a in input_axes if a != "c"])
+
+            if n_out > n_in:
+                # ponytail: transform adds spatial dim(s). Broadcast data with
+                # singleton at front. Revisit ordering if real data needs differ.
+
+                # Build square affine sized for output CS
+                new_affine = np.eye(n_out + 1)
+                new_affine[:, -n_out:] = affine
+                affine = new_affine
+
+                n_extra = n_out - n_in
+                for idx, lyr in enumerate(_layers):
+                    data_expanded = [da.expand_dims(arr, axis=tuple(range(n_extra))) for arr in lyr[0]]
+                    props_expanded = lyr[1].copy()
+
+                    # we need to update the layer properties to match the new data shape.
+                    props_expanded["scale"] = props_expanded["scale"][-1] + props_expanded["scale"]
+                    props_expanded["axis_labels"] = [ax.name for ax in output_cs_axes if ax.type != "channel"]
+                    props_expanded["units"] = [props_expanded["units"][-1]] + props_expanded["units"] 
+                    _layers[idx] = (data_expanded, props_expanded, lyr[2])
+                
+            elif n_out < n_in:
+                # ponytail: transform removes spatial dims - unusual, warn and
+                # use identity. Add projection support when a real case appears.
+                warnings.warn(
+                    f"Transform reduces dims ({n_in} -> {n_out}), using identity"
+                )
+                affine = np.eye(n_data_spatial + 1)
+                # also need to prepend the name of the added dim to 
+
+            for lyr in _layers:
+                lyr[1]["affine"] = affine
+            layers.extend(_layers)
 
         return layers
-
-    def add_transforms_from_image(self, image_path: str, transforms: dict) -> None:
-        image_attrs = Spec.get_attrs(self.group[image_path])
-        # need to add child transforms to our graph
-        for ms in image_attrs.get("multiscales", []):
-            for child_transf in ms.get("coordinateTransformations", []):
-                # TODO: assert output doesn't have 'path'?
-                out_path_name = image_path + "/" + child_transf["output"]["name"]
-                child_transf["input_full_path"] = (
-                    image_path + "/" + child_transf["input"]["name"]
-                )
-                transforms[out_path_name].append(child_transf)
-            # and the datasets... - find 'output' (just use first one)
-            for ds in ms.get("datasets", [])[:1]:
-                # only expect single transform...
-                for ds_transf in ds.get("coordinateTransformations", []):
-                    # TODO: assert output doesn't have 'path'?
-                    out_path_name = image_path + "/" + ds_transf["output"]["name"]
-                    # We ASSUME that ds_transf["input"]["path"] is same as ds path
-                    # Don't set 'input_full_path' as we are at child node of graph
-                    # Use this to create the Multiscales object below...
-                    ds_transf["multiscale_path"] = image_path
-                    transforms[out_path_name].append(ds_transf)
-
-    def iter_nodes(self) -> Iterable[Spec]:
-
-        # transforms key is each transform output "path.zarr/name"
-        # (where name is name of coordinateSystem)
-        # we build a LIST of child transforms that output to each coordinateSystem...
-        transforms = defaultdict(list)  # type: Dict[str, List[Dict[str, Any]]]
-        # track unique coordinateSystems by "path.zarr/name"
-
-        # FIRST, go through all transforms in this scene,
-        # AND any child transforms we find at 'input' or 'output' paths...
-        scene_attrs = Spec.get_attrs(self.group).get("scene", {})
-        visited_paths = set()
-        for transf in scene_attrs.get("coordinateTransformations", []):
-            output = transf["output"]
-            transf["input_full_path"] = cs_path_name(transf["input"])
-            transforms[cs_path_name(output)].append(transf)
-            # traverse to input/output coordinateSystem paths...
-            for io in ("input", "output"):
-                image_path = transf[io].get("path", None)
-                if image_path is not None and image_path not in visited_paths:
-                    self.add_transforms_from_image(image_path, transforms)
-                    visited_paths.add(image_path)
-
-        # Useful debug out to see the graph of transforms...
-        # print("Scene.iter_nodes...transforms")
-        # for key, transfs in transforms.items():
-        #     print(f"  {key}: ", [t["input_full_path"] for t in transfs])
-        #   translated_x_and_y:  ['4995115_full.zarr/physical', 'translated_x50']
-        #   4995115_full.zarr/physical:  ['4995115_full.zarr/s0']
-        #   translated_x50:  ['rot10.zarr/rotated', 'rot45.zarr/rotated']
-        #   rot10.zarr/rotated:  ['rot10.zarr/physical']
-        #   rot10.zarr/physical:  ['rot10.zarr/s0']
-        #   rot45.zarr/rotated:  ['rot45.zarr/physical']
-        #   rot45.zarr/physical:  ['rot45.zarr/s0']
-
-        # find the unique coordinateSystems (outputs) that are NOT also inputs
-        outputs = set(transforms.keys())
-        for transf_list in transforms.values():
-            outputs -= {t.get("input_full_path") for t in transf_list}
-
-        # if more than 1 output, pick the one with most child inputs
-        chosen_output = None
-        if len(outputs) > 1:
-            max_inputs = 0
-            for output in outputs:
-                num_inputs = len(list(iter_graph(output, [], transforms)))
-                if num_inputs > max_inputs:
-                    max_inputs = num_inputs
-                    chosen_output = output
-        else:
-            chosen_output = outputs.pop()
-
-        # now iterate through the graph starting at the chosen output...
-        inputs = list(iter_graph(chosen_output, [], transforms))
-        # Ignore any transform lists that don't lead to a multiscale image...
-        multiscale_inputs = [inp for inp in inputs if "multiscale_path" in inp[-1]]
-
-        for trans_list in multiscale_inputs:
-            # the last transform should have "multiscale_path" key...
-            ms_image = Multiscales(self.group[trans_list[-1]["multiscale_path"]])
-            # transforms list was created from [output,...,input]
-            # we reverse to get [input,...,output] to apply transforms in correct order
-            trans_list.reverse()
-            ms_image.parent_transforms = trans_list
-            yield ms_image
-
 
 class Plate(Spec):
     @staticmethod
@@ -727,83 +436,6 @@ class Label(Multiscales):
         # split), so the channel axis must be retained in the per-axis metadata
         # to match the layer ndim.
         return False
-
-    def add_parent_transform(
-        self, transform: Dict[str, Any], parent_channel_axis: int | None
-    ) -> None:
-        # Add the parent transform to the current transform. If
-        # parent_channel_axis is not in Label, we need to remove that axis
-        # from the transform.
-        label_channel_axis = self.metadata().get("channel_axis", None)
-        if (
-            parent_channel_axis is not None
-            and parent_channel_axis != label_channel_axis
-        ):
-            transform = remove_axis_from_transform(transform, parent_channel_axis)
-        self.parent_transforms.append(transform)
-
-    def metadata(self) -> Dict[str, Any]:
-        # override Multiscales metadata
-        # call super
-        ms_data = super().metadata()
-        if ms_data is None:
-            ms_data = {}
-
-        attrs = Spec.get_attrs(self.group)
-        image_label = attrs.get("image-label", {})
-        colors: dict[int | bool, list[float]] = {}
-        color_list = image_label.get("colors", [])
-        if color_list:
-            for color in color_list:
-                try:
-                    label_value = color["label-value"]
-                    rgba = color.get("rgba", None)
-                    if rgba:
-                        rgba = [x / 255 for x in rgba]
-
-                    if isinstance(label_value, (bool, int)):
-                        colors[label_value] = rgba
-                    else:
-                        raise Exception("not bool or int")
-
-                except Exception:
-                    pass
-                    # LOGGER.exception("invalid color - %s", color)
-
-        props_list = image_label.get("properties", [])
-        if props_list:
-            props_by_labelid: dict[int, dict[str, str]] = {}
-            for props in props_list:
-                label_val = props["label-value"]
-                props_by_labelid[label_val] = dict(props)
-                del props_by_labelid[label_val]["label-value"]
-
-            properties: Dict[str, List] = {}
-            # First, create lists for all existing keys...
-            for label_id, props_dict in props_by_labelid.items():
-                for key in props_dict.keys():
-                    properties[key] = []
-
-            keys = list(properties.keys())
-
-            properties["index"] = []
-            for label_id, props_dict in props_by_labelid.items():
-                properties["index"].append(label_id)
-                # ...in case some objects don't have all the keys
-                for key in keys:
-                    properties[key].append(props_dict.get(key, None))
-            ms_data["properties"] = properties
-
-        rsp = {
-            "name": f"labels{self.group.name}",
-            "visible": False,  # labels not visible initially
-            **ms_data,
-        }
-        # in case no colors, don't set colormap (no labels will be shown)
-        if len(colors) > 0:
-            rsp["colormap"] = colors
-
-        return rsp
 
 
 def read_ome_zarr(root_group: Group) -> Callable:
