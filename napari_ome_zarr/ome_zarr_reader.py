@@ -334,9 +334,8 @@ class Scene(Spec):
         return "scene" in attrs
 
     def to_layer_data(
-            self,
-            target_coordinate_system: tuple[str, str] | None = None
-            ) -> List[LayerData]:
+        self, target_coordinate_system: tuple[str, str] | None = None
+    ) -> List[LayerData]:
         layers: List[LayerData] = []
         scene = OMEZarrScene.from_ome_zarr(self.group)
         all_cs = scene.get_coordinate_system()
