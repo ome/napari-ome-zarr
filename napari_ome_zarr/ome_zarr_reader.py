@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 
 import dask.array as da
 import numpy as np
+import transformnd as tnd
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from napari.utils.transforms import Affine
@@ -50,22 +51,90 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
 
 
 def _ome_zarr_ms_to_layer_props(
-    multiscales: OMEZarrMultiscale | OMEZarrLabels, channel_index: int | None
+    multiscales: OMEZarrMultiscale | OMEZarrLabels,
+    channel_index: int | None,
+    inserted_defaults: list[dict[str, Any]] | None = None
 ) -> Dict[str, Any]:
+    """
+    Helper function to extract properties from an OME-Zarr
+    multiscale or label images that would apply to all channels
+    (if present) alike.
+    """
 
     # get scale (same for all channels)
     s = list(multiscales.images[0].scale.values())
     scale = (
         s[:channel_index] + s[channel_index + 1 :] if channel_index is not None else s
     )
-
     props: Dict[str, Any] = {}
     if multiscales.images[0].axes_units:
         props["units"] = list(multiscales.images[0].axes_units.values())
+
     props["axis_labels"] = [ax for ax in multiscales.images[0].axes if ax != "c"]
     props["scale"] = scale
+    props["name"] = multiscales.name
+
+    if inserted_defaults is not None:
+        for item in inserted_defaults:
+            if "scale" in item:
+                scale.insert(item["index"], item["scale"])
+            if "axis_labels" in item:
+                props["axis_labels"].insert(item["index"], item["axis_labels"])
+            if "units" in item:
+                props["units"].insert(item["index"], item["units"])
+
     return props
 
+def _extract_channel_props(
+        multiscales: OMEZarrMultiscale | OMEZarrLabels
+        ) -> Dict[str, Any] | None:
+    """
+    Helper function to extract channel properties from an OME-Zarr
+    multiscale or label images that would apply per channel
+    (if present).
+    """
+
+    props: Dict[str, Any] | None = None
+    if hasattr(multiscales, "omero"):
+        omero = multiscales.omero.model_dump()
+        colormaps = []
+        ch_names = []
+        visibles = []
+        contrast_limits: list[list[int]] = []
+        model = omero.get("rdefs", {}).get("model", "unset")
+        greyscale = model == "greyscale"
+
+        for index, ch in enumerate(omero["channels"]):
+            color = ch.get("color", None)
+            if color is not None:
+                rgb = [(int(color[i : i + 2], 16) / 255) for i in range(0, 6, 2)]
+                if greyscale:
+                    rgb = [1, 1, 1]
+                # colormap is range: black -> rgb color
+                cm = Colormap([[0, 0, 0], rgb])
+                # Try to match colormap to an existing napari colormap
+                cm = _match_colors_to_available_colormap(cm)
+                colormaps.append(cm)
+            ch_name = ch.get("label", f"channel_{index}")
+            ch_names.append(multiscales.name and f"{multiscales.name}: {ch_name}" or ch_name)
+            visibles.append(ch.get("active", True))
+
+            window = ch.get("window", None)
+            if window is not None:
+                start = window.get("start", None)
+                end = window.get("end", None)
+                if start is not None and end is not None:
+                    # skip if None. Otherwise check no previous skip
+                    if len(contrast_limits) == index:
+                        contrast_limits.append([start, end])
+        props = {
+            "colormap": colormaps,
+            "name": ch_names,
+            "visible": visibles,
+            "contrast_limits": contrast_limits,
+        }
+
+    return props
 
 class Spec(ABC):
     def __init__(self, group: Group) -> None:
@@ -117,6 +186,7 @@ class Multiscales(Spec):
         has_channel = "c" in ms.images[0].axes
         channel_index = ms.images[0].axes.index("c") if has_channel else None
         n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
+        channel_props = _extract_channel_props(ms)
 
         layers: List[LayerData] = []
         for ch_idx in range(n_channels):
@@ -126,8 +196,16 @@ class Multiscales(Spec):
                 else [img.data for img in ms.images]
             )
 
+            # get image-specific, channel-agnostic properties
             props = _ome_zarr_ms_to_layer_props(ms, channel_index)
-            props["name"] = ms.name
+
+            # get channel-specific properties if present
+            if channel_props is not None:
+                for key, value in channel_props.items():
+                    if isinstance(value, list) and ch_idx < len(value):
+                        props[key] = value[ch_idx]
+                    else:
+                        props[key] = value
 
             layers.extend([(data, props, "image")])
 
@@ -201,97 +279,106 @@ class Scene(Spec):
         all_cs = scene.get_coordinate_system()
 
         target_coordinate_system: tuple[str, str] | None = None
-        if "" in all_cs:
-            target_coordinate_system = ("", all_cs[""][0].name)
-        else:
-            # Pick image with highest dimensionality to avoid projecting down
-            key_with_max_axes = max(all_cs.keys(), key=lambda k: len(all_cs[k][0].axes))
-            target_coordinate_system = (key_with_max_axes, all_cs[key_with_max_axes][0].name)
-
+        if all_cs:
+            # Get first coordinate system (sorted for determinism)
+            first_cs_key = next(iter(sorted(all_cs.keys())))
+            target_coordinate_system = first_cs_key
+        
         for key in scene.images.keys():
 
             _layers = Multiscales(self.group[key]).to_layer_data()
-            ms = OMEZarrMultiscale.from_ome_zarr(self.group[key])
+            ms = scene.images[key]
 
             # traverse graph into target coordinate system
-            input_cs = (key, scene.images[key].metadata.intrinsic_coordinate_system.name)
-            seq = scene._graph.get_sequence(input_cs, target_coordinate_system)
+            input_coordinate_system = (key, scene.images[key].metadata.intrinsic_coordinate_system.name)
+            seq = scene._graph.get_sequence(input_coordinate_system, target_coordinate_system, full=True)
             affine = seq.simplify().to_affine().matrix
 
-            # Get axes of input and output coordinate systems to find channel axes
-            input_cs_obj = scene.get_coordinate_system(input_cs[0], input_cs[1])
-            input_cs_axes = input_cs_obj[input_cs[0]][0].axes
-            output_cs_obj = scene.get_coordinate_system(
-                target_coordinate_system[0], target_coordinate_system[1]
-            )
-            output_cs_axes = output_cs_obj[target_coordinate_system[0]][0].axes
+            # Get axes of input and output coordinate systems
+            input_cs = scene.get_coordinate_system(*input_coordinate_system)
+            output_cs = scene.get_coordinate_system(*target_coordinate_system)
 
-            # Find channel axis indices in input/output coordinate systems
-            input_ch_idx = next(
-                (i for i, ax in enumerate(input_cs_axes) if ax.type == "channel"), None
-            )
-            output_ch_idx = next(
-                (i for i, ax in enumerate(output_cs_axes) if ax.type == "channel"), None
-            )
+            input_cs_obj = input_cs[input_coordinate_system]
+            output_cs_obj = output_cs[target_coordinate_system]
 
-            # Common case: both have channel at same index, matrix is square
-            if (
-                input_ch_idx is not None
-                and affine.shape[0] == affine.shape[1]
-            ):
-                affine = np.delete(affine, input_ch_idx, axis=0)
-                affine = np.delete(affine, input_ch_idx, axis=1)
-                for lyr in _layers:
-                    lyr[1]["affine"] = affine
-                layers.extend(_layers)
-                continue
+            # Expand data if output has more spatial dims than input
+            input_spatial = [ax.name for ax in input_cs_obj.axes if ax.type != "channel"]
+            output_spatial = [ax.name for ax in output_cs_obj.axes if ax.type != "channel"]
+            output_cs_ax_types = [ax.type for ax in output_cs_obj.axes]
+            input_cs_ax_types = [ax.type for ax in input_cs_obj.axes]
+            output_ch_idx = output_cs_ax_types.index("channel") if "channel" in output_cs_ax_types else None
+            input_ch_index = input_cs_ax_types.index("channel") if "channel" in input_cs_ax_types else None
 
-            # Remove channel row/column independently (handles dimension changes)
-            # Row = output axis, Column = input axis
-            if output_ch_idx is not None:
-                affine = np.delete(affine, output_ch_idx, axis=0)
-            if input_ch_idx is not None:
-                affine = np.delete(affine, input_ch_idx, axis=1)
-
-            # Check for spatial dimension mismatch after channel removal
-            n_out = affine.shape[0] - 1  # excl homogeneous row
-            n_in = affine.shape[1] - 1   # excl homogeneous col
-            input_axes = ms.images[0].axes
-            n_data_spatial = len([a for a in input_axes if a != "c"])
-
-            if n_out > n_in:
-                # ponytail: transform adds spatial dim(s). Broadcast data with
-                # singleton at front. Revisit ordering if real data needs differ.
-
-                # Build square affine sized for output CS
-                new_affine = np.eye(n_out + 1)
-                new_affine[:, -n_out:] = affine
-                affine = new_affine
-
-                n_extra = n_out - n_in
-                for idx, lyr in enumerate(_layers):
-                    data_expanded = [da.expand_dims(arr, axis=tuple(range(n_extra))) for arr in lyr[0]]
-                    props_expanded = lyr[1].copy()
-
-                    # we need to update the layer properties to match the new data shape.
-                    props_expanded["scale"] = props_expanded["scale"][-1] + props_expanded["scale"]
-                    props_expanded["axis_labels"] = [ax.name for ax in output_cs_axes if ax.type != "channel"]
-                    props_expanded["units"] = [props_expanded["units"][-1]] + props_expanded["units"] 
-                    _layers[idx] = (data_expanded, props_expanded, lyr[2])
+            n_extra = len(output_spatial) - len(input_spatial)
+            if n_extra > 0:
+                updated_transforms = []
+                transforms = seq.flatten()
                 
-            elif n_out < n_in:
-                # ponytail: transform removes spatial dims - unusual, warn and
-                # use identity. Add projection support when a real case appears.
-                warnings.warn(
-                    f"Transform reduces dims ({n_in} -> {n_out}), using identity"
-                )
-                affine = np.eye(n_data_spatial + 1)
-                # also need to prepend the name of the added dim to 
+                # we need to find the idx of the projectAxis transform in the list of transforms
+                created_output_idxs = []
+                for idx_tf, tf in enumerate(transforms):
+                    if isinstance(tf, tnd.transforms.ProjectAxis):
+                        created_output_idxs = tf.created
+                        break
 
-            for lyr in _layers:
-                lyr[1]["affine"] = affine
+                if idx_tf > 0:
+                    for tf in transforms[:idx_tf]:
+                        single_affine = tf.to_affine().matrix
+
+                        # insert columns at the created output idxs
+                        # (0, 1, 0, ...) if the created output idx is 0,
+                        # (0, 0, 1, ...) if the created output idx is 1, etc.
+                        for output_idx in created_output_idxs:
+                            single_affine = np.insert(single_affine, output_idx, np.eye(single_affine.shape[0])[:, 0], axis=1)
+
+                        updated_transforms.append(tnd.transforms.Affine(single_affine))
+
+                for tf in transforms[idx_tf+1:]:
+                    updated_transforms.append(tf)
+
+                tf_sequence = tnd.TransformSequence(updated_transforms)
+                affine = tf_sequence.simplify().to_affine().matrix
+
+                # find out index where to insert dims excluding channel dimension
+                output_cs_ax_types = [ax.type for ax in output_cs_obj.axes]
+                output_ch_idx = output_cs_ax_types.index("channel") if "channel" in output_cs_ax_types else None
+                if output_ch_idx is not None:
+                    created_output_idxs = [idx - 1 for idx in created_output_idxs if idx > output_ch_idx]
+
+                # now insert singleton dimension in layers data
+                for idx, lyr in enumerate(_layers):
+                    layer_data = lyr[0]
+                    layer_props = lyr[1]
+                    updated_props = _ome_zarr_ms_to_layer_props(
+                        ms,
+                        input_ch_index,
+                        inserted_defaults=[
+                            {"index": idx,
+                             "scale": 1.0,
+                             "axis_labels": "Unknown",
+                             "units": None}
+                            for idx in created_output_idxs])
+                    for key, value in updated_props.items():
+                        if key == "name":
+                            continue  # don't overwrite name
+                        layer_props[key] = value
+                    for output_idx in created_output_idxs:
+                        layer_data = [da.expand_dims(d, axis=output_idx) for d in layer_data]
+
+                    _layers[idx] = (layer_data, layer_props, lyr[2])
+
+            if input_ch_index is not None:
+                # remove channel row/col from affine
+                affine = np.delete(affine, input_ch_index , axis=1)
+
+            if output_ch_idx is not None:
+                # remove channel row/col from affine
+                affine = np.delete(affine, output_ch_idx, axis=0)
+
+            for idx, lyr in enumerate(_layers):
+                _layers[idx][1]["affine"] = affine
             layers.extend(_layers)
-
+        
         return layers
 
 class Plate(Spec):
