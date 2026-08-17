@@ -53,7 +53,7 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
 def _ome_zarr_ms_to_layer_props(
     multiscales: OMEZarrMultiscale | OMEZarrLabels,
     channel_index: int | None,
-    inserted_defaults: list[dict[str, Any]] | None = None
+    inserted_defaults: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """
     Helper function to extract properties from an OME-Zarr
@@ -85,9 +85,10 @@ def _ome_zarr_ms_to_layer_props(
 
     return props
 
+
 def _extract_channel_props(
-        multiscales: OMEZarrMultiscale | OMEZarrLabels
-        ) -> Dict[str, Any] | None:
+    multiscales: OMEZarrMultiscale | OMEZarrLabels,
+) -> Dict[str, Any] | None:
     """
     Helper function to extract channel properties from an OME-Zarr
     multiscale or label images that would apply per channel
@@ -116,7 +117,9 @@ def _extract_channel_props(
                 cm = _match_colors_to_available_colormap(cm)
                 colormaps.append(cm)
             ch_name = ch.get("label", f"channel_{index}")
-            ch_names.append(multiscales.name and f"{multiscales.name}: {ch_name}" or ch_name)
+            ch_names.append(
+                multiscales.name and f"{multiscales.name}: {ch_name}" or ch_name
+            )
             visibles.append(ch.get("active", True))
 
             window = ch.get("window", None)
@@ -135,6 +138,7 @@ def _extract_channel_props(
         }
 
     return props
+
 
 class Spec(ABC):
     def __init__(self, group: Group) -> None:
@@ -284,15 +288,20 @@ class Scene(Spec):
             # Get first coordinate system (sorted for determinism)
             first_cs_key = next(iter(sorted(all_cs.keys())))
             target_coordinate_system = first_cs_key
-        
+
         for key in scene.images.keys():
 
             _layers = Multiscales(self.group[key]).to_layer_data()
             ms = scene.images[key]
 
             # traverse graph into target coordinate system
-            input_coordinate_system = (key, scene.images[key].metadata.intrinsic_coordinate_system.name)
-            seq = scene._graph.get_sequence(input_coordinate_system, target_coordinate_system, full=True)
+            input_coordinate_system = (
+                key,
+                scene.images[key].metadata.intrinsic_coordinate_system.name,
+            )
+            seq = scene._graph.get_sequence(
+                input_coordinate_system, target_coordinate_system, full=True
+            )
             affine = seq.simplify().to_affine().matrix
 
             # Get axes of input and output coordinate systems
@@ -303,18 +312,30 @@ class Scene(Spec):
             output_cs_obj = output_cs[target_coordinate_system]
 
             # Expand data if output has more spatial dims than input
-            input_spatial = [ax.name for ax in input_cs_obj.axes if ax.type != "channel"]
-            output_spatial = [ax.name for ax in output_cs_obj.axes if ax.type != "channel"]
+            input_spatial = [
+                ax.name for ax in input_cs_obj.axes if ax.type != "channel"
+            ]
+            output_spatial = [
+                ax.name for ax in output_cs_obj.axes if ax.type != "channel"
+            ]
             output_cs_ax_types = [ax.type for ax in output_cs_obj.axes]
             input_cs_ax_types = [ax.type for ax in input_cs_obj.axes]
-            output_ch_idx = output_cs_ax_types.index("channel") if "channel" in output_cs_ax_types else None
-            input_ch_index = input_cs_ax_types.index("channel") if "channel" in input_cs_ax_types else None
+            output_ch_idx = (
+                output_cs_ax_types.index("channel")
+                if "channel" in output_cs_ax_types
+                else None
+            )
+            input_ch_index = (
+                input_cs_ax_types.index("channel")
+                if "channel" in input_cs_ax_types
+                else None
+            )
 
             n_extra = len(output_spatial) - len(input_spatial)
             if n_extra > 0:
                 updated_transforms = []
                 transforms = seq.flatten()
-                
+
                 # we need to find the idx of the projectAxis transform in the list of transforms
                 created_output_idxs = []
                 for idx_tf, tf in enumerate(transforms):
@@ -330,11 +351,16 @@ class Scene(Spec):
                         # (0, 1, 0, ...) if the created output idx is 0,
                         # (0, 0, 1, ...) if the created output idx is 1, etc.
                         for output_idx in created_output_idxs:
-                            single_affine = np.insert(single_affine, output_idx, np.eye(single_affine.shape[0])[:, 0], axis=1)
+                            single_affine = np.insert(
+                                single_affine,
+                                output_idx,
+                                np.eye(single_affine.shape[0])[:, 0],
+                                axis=1,
+                            )
 
                         updated_transforms.append(tnd.transforms.Affine(single_affine))
 
-                for tf in transforms[idx_tf+1:]:
+                for tf in transforms[idx_tf + 1 :]:
                     updated_transforms.append(tf)
 
                 tf_sequence = tnd.TransformSequence(updated_transforms)
@@ -342,9 +368,15 @@ class Scene(Spec):
 
                 # find out index where to insert dims excluding channel dimension
                 output_cs_ax_types = [ax.type for ax in output_cs_obj.axes]
-                output_ch_idx = output_cs_ax_types.index("channel") if "channel" in output_cs_ax_types else None
+                output_ch_idx = (
+                    output_cs_ax_types.index("channel")
+                    if "channel" in output_cs_ax_types
+                    else None
+                )
                 if output_ch_idx is not None:
-                    created_output_idxs = [idx - 1 for idx in created_output_idxs if idx > output_ch_idx]
+                    created_output_idxs = [
+                        idx - 1 for idx in created_output_idxs if idx > output_ch_idx
+                    ]
 
                 # now insert singleton dimension in layers data
                 for idx, lyr in enumerate(_layers):
@@ -354,23 +386,29 @@ class Scene(Spec):
                         ms,
                         input_ch_index,
                         inserted_defaults=[
-                            {"index": idx,
-                             "scale": 1.0,
-                             "axis_labels": "Unknown",
-                             "units": None}
-                            for idx in created_output_idxs])
+                            {
+                                "index": idx,
+                                "scale": 1.0,
+                                "axis_labels": "Unknown",
+                                "units": None,
+                            }
+                            for idx in created_output_idxs
+                        ],
+                    )
                     for key, value in updated_props.items():
                         if key == "name":
                             continue  # don't overwrite name
                         layer_props[key] = value
                     for output_idx in created_output_idxs:
-                        layer_data = [da.expand_dims(d, axis=output_idx) for d in layer_data]
+                        layer_data = [
+                            da.expand_dims(d, axis=output_idx) for d in layer_data
+                        ]
 
                     _layers[idx] = (layer_data, layer_props, lyr[2])
 
             if input_ch_index is not None:
                 # remove channel row/col from affine
-                affine = np.delete(affine, input_ch_index , axis=1)
+                affine = np.delete(affine, input_ch_index, axis=1)
 
             if output_ch_idx is not None:
                 # remove channel row/col from affine
@@ -379,7 +417,7 @@ class Scene(Spec):
             for idx, lyr in enumerate(_layers):
                 _layers[idx][1]["affine"] = affine
             layers.extend(_layers)
-        
+
         return layers
 
 
