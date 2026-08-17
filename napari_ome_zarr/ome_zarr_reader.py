@@ -329,12 +329,14 @@ class Scene(Spec):
         attrs = Spec.get_attrs(group)
         return "scene" in attrs
 
-    def to_layer_data(self) -> List[LayerData]:
+    def to_layer_data(
+            self,
+            target_coordinate_system: tuple[str, str] | None = None
+            ) -> List[LayerData]:
         layers: List[LayerData] = []
         scene = OMEZarrScene.from_ome_zarr(self.group)
         all_cs = scene.get_coordinate_system()
 
-        target_coordinate_system: tuple[str, str] | None = None
         if all_cs:
             # Get first coordinate system (sorted for determinism)
             first_cs_key = next(iter(sorted(all_cs.keys())))
