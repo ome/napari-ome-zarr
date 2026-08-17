@@ -227,6 +227,7 @@ class Multiscales(Spec):
         """
         return True
 
+
 class Bioformats2raw(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -380,6 +381,7 @@ class Scene(Spec):
             layers.extend(_layers)
         
         return layers
+
 
 class Plate(Spec):
     @staticmethod
