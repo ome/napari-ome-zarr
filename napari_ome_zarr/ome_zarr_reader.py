@@ -85,6 +85,7 @@ def _ome_zarr_ms_to_layer_props(
 
     return props
 
+
 def _strip_channel_from_affine(
     affine: np.ndarray,
     input_ch_idx: int | None,
@@ -103,37 +104,40 @@ def _expand_affine_for_projection(
 ) -> np.ndarray:
     """
     Handle affine expansion when ProjectAxis adds dimensions.
-    
+
     Transforms before ProjectAxis need extra columns inserted so matrix
     multiplication works after the axis projection.
     """
     transforms = seq.flatten()
-    
+
     # Find ProjectAxis transform
     project_idx = next(
-        (i for i, tf in enumerate(transforms) if isinstance(tf, tnd.transforms.ProjectAxis)),
-        None
+        (
+            i
+            for i, tf in enumerate(transforms)
+            if isinstance(tf, tnd.transforms.ProjectAxis)
+        ),
+        None,
     )
-    
+
     if project_idx is None or project_idx == 0:
         return seq.simplify().to_affine().matrix
-    
+
     created_output_idxs = transforms[project_idx].created
     updated_transforms = []
-    
+
     # Expand transforms before ProjectAxis
     for tf in transforms[:project_idx]:
         single_affine = tf.to_affine().matrix
         for output_idx in created_output_idxs:
             single_affine = np.insert(
-                single_affine, output_idx,
-                np.eye(single_affine.shape[0])[:, 0], axis=1
+                single_affine, output_idx, np.eye(single_affine.shape[0])[:, 0], axis=1
             )
         updated_transforms.append(tnd.transforms.Affine(single_affine))
-    
+
     # Keep transforms after ProjectAxis as-is
-    updated_transforms.extend(transforms[project_idx + 1:])
-    
+    updated_transforms.extend(transforms[project_idx + 1 :])
+
     return tnd.TransformSequence(updated_transforms).simplify().to_affine().matrix
 
 
@@ -387,12 +391,16 @@ class Scene(Spec):
             n_extra = len(output_spatial) - len(input_spatial)
             if n_extra > 0:
                 affine = _expand_affine_for_projection(seq)
-                
+
                 # Get created axis indices from ProjectAxis, adjusted for channel
                 transforms = seq.flatten()
                 project_tf = next(
-                    (tf for tf in transforms if isinstance(tf, tnd.transforms.ProjectAxis)),
-                    None
+                    (
+                        tf
+                        for tf in transforms
+                        if isinstance(tf, tnd.transforms.ProjectAxis)
+                    ),
+                    None,
                 )
                 created_output_idxs = project_tf.created if project_tf else []
 
@@ -410,17 +418,26 @@ class Scene(Spec):
                         ms,
                         input_ch_index,
                         inserted_defaults=[
-                            {"index": i, "scale": 1.0, "axis_labels": "Unknown", "units": None}
+                            {
+                                "index": i,
+                                "scale": 1.0,
+                                "axis_labels": "Unknown",
+                                "units": None,
+                            }
                             for i in created_output_idxs
-                        ]
+                        ],
                     )
 
                     # update all properties except name (keep original name)
-                    layer_props |= {k: v for k, v in updated_props.items() if k != "name"}
+                    layer_props |= {
+                        k: v for k, v in updated_props.items() if k != "name"
+                    }
 
                     # insert singleton dimensions in layer data
                     for out_idx in created_output_idxs:
-                        layer_data = [da.expand_dims(d, axis=out_idx) for d in layer_data]
+                        layer_data = [
+                            da.expand_dims(d, axis=out_idx) for d in layer_data
+                        ]
 
                     # update layer data tuple
                     _layers[idx] = (layer_data, layer_props, lyr[2])
