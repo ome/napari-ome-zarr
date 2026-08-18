@@ -91,6 +91,13 @@ Supported `coordinateTransformations` currently include `identity`, `scale`, `tr
 Contributions are very welcome. Tests can be run with [tox], please ensure
 the coverage at least stays the same before you submit a pull request.
 
+## Release process
+
+To release, use the [GitHub releases page](https://github.com/ome/napari-ome-zarr/releases) to "Draft a new release".
+Create a new Tag, ensuring it starts with `v`, e.g. `v0.10.1`. This will be detected by GitHub actions and trigger
+a deploy of the release to Pypi.
+The release notes can be generated automatically and subsequently edited manually if desired.
+
 ## License
 
 Distributed under the terms of the [BSD-3] license,
