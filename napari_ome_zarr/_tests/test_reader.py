@@ -86,7 +86,7 @@ class TestNapari:
             assert 0 == metadata["channel_axis"]
             # TODO: Update name check once OMEZarrScene merged
             # with https://github.com/ome/ome-zarr-py/pull/622
-            #assert ["Red", "Green", "Blue"] == metadata["name"]
+            # assert ["Red", "Green", "Blue"] == metadata["name"]
             assert [
                 AVAILABLE_COLORMAPS["red"],
                 AVAILABLE_COLORMAPS["green"],
@@ -97,7 +97,7 @@ class TestNapari:
         else:
             assert "channel_axis" not in metadata
             # TODO: Update name check once OMEZarrScene merged
-            # with https://github.com/ome/ome-zarr-py/pull/622            
+            # with https://github.com/ome/ome-zarr-py/pull/622
             # assert metadata["name"] == "channel_0"
             assert metadata["colormap"] == AVAILABLE_COLORMAPS["gray"]
             assert metadata["contrast_limits"] == [0, 255]
@@ -209,7 +209,7 @@ def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
 
     # label: not split, so the channel axis is retained and axis_labels length
     # must equal the (4D) layer ndim
-    #assert "channel_axis" not in label[1]
+    # assert "channel_axis" not in label[1]
     assert label[1]["axis_labels"] == ("z", "y", "x")
     assert len(label[1]["axis_labels"]) == label[0][0].ndim
     # units are forwarded per-axis: the unit-less channel axis stays None so the
