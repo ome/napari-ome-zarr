@@ -68,9 +68,9 @@ def _ome_zarr_ms_to_layer_props(
     )
     props: Dict[str, Any] = {}
     if multiscales.images[0].axes_units:
-        props["units"] = list(multiscales.images[0].axes_units.values())
+        props["units"] = tuple(multiscales.images[0].axes_units.values())
 
-    props["axis_labels"] = [ax for ax in multiscales.images[0].axes if ax != "c"]
+    props["axis_labels"] = tuple([ax for ax in multiscales.images[0].axes if ax != "c"])
     props["scale"] = scale
     props["name"] = multiscales.name
 
@@ -151,7 +151,7 @@ def _extract_channel_props(
     """
 
     props: Dict[str, Any] | None = None
-    if hasattr(multiscales, "omero"):
+    if hasattr(multiscales, "omero") and multiscales.omero is not None:
         omero = multiscales.omero.model_dump()
         colormaps = []
         ch_names = []
@@ -185,6 +185,15 @@ def _extract_channel_props(
                     # skip if None. Otherwise check no previous skip
                     if len(contrast_limits) == index:
                         contrast_limits.append([start, end])
+
+        if len(colormaps) == 1:
+            colormaps = colormaps[0]
+        if len(visibles) == 1:
+            visibles = visibles[0]
+        if len(contrast_limits) == 1:
+            contrast_limits = contrast_limits[0]
+        if len(ch_names) == 1:
+            ch_names = ch_names[0]
         props = {
             "colormap": colormaps,
             "name": ch_names,
@@ -244,29 +253,20 @@ class Multiscales(Spec):
 
         has_channel = "c" in ms.images[0].axes
         channel_index = ms.images[0].axes.index("c") if has_channel else None
-        n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
+
+        # Get image-specific properties (channel axis removed from scale/units/axis_labels)
+        props = _ome_zarr_ms_to_layer_props(ms, channel_index)
+
+        # Tell napari where the channel axis is
+        if has_channel:
+            props["channel_axis"] = channel_index
+
+        # Merge channel-specific properties (colormaps, names, visible, contrast_limits)
         channel_props = _extract_channel_props(ms)
+        if channel_props is not None:
+            props |= channel_props
 
-        layers: List[LayerData] = []
-        for ch_idx in range(n_channels):
-            data = (
-                [da.take(img.data, ch_idx, axis=channel_index) for img in ms.images]
-                if has_channel
-                else [img.data for img in ms.images]
-            )
-
-            # get image-specific, channel-agnostic properties
-            props = _ome_zarr_ms_to_layer_props(ms, channel_index)
-
-            # get channel-specific properties if present
-            if channel_props is not None:
-                for key, value in channel_props.items():
-                    if isinstance(value, list) and ch_idx < len(value):
-                        props[key] = value[ch_idx]
-                    else:
-                        props[key] = value
-
-            layers.extend([(data, props, "image")])
+        layers: List[LayerData] = [(data, props, "image")]
 
         if ms.labels is not None:
             for label_key in ms.labels.keys():
@@ -464,7 +464,10 @@ class Plate(Spec):
         well_group = get_first_well(self.group)
         first_field_path = get_first_field_path(well_group)
         image_group = well_group[first_field_path]
-        return Multiscales(image_group).metadata()
+        return Multiscales(image_group).to_layer_data()[0][1]
+
+    def to_layer_data(self) -> List[LayerData]:
+        return [(self.data(), self.metadata(), "image")]
 
     def children(self) -> list[Spec]:
         # Plate has children If it has labels - check one Well...
@@ -495,6 +498,9 @@ class PlateLabels(Plate):
     def children(self) -> list[Spec]:
         # Need to override Plate.children()
         return []
+
+    def to_layer_data(self) -> List[LayerData]:
+        return [(self.data(), self.metadata(), "labels")]
 
     def metadata(self) -> dict:
         # override Plate metadata (no channel-axis etc)
@@ -554,9 +560,12 @@ class Label(Multiscales):
             props = _ome_zarr_ms_to_layer_props(ms, channel_index)
             props["name"] = ms.name
 
-            # get color settings if present
-            if hasattr(ms, "image_label") and hasattr(ms.image_label, "colors"):
-
+            # Get color settings if present
+            if (
+                hasattr(ms, "image_label")
+                and hasattr(ms.image_label, "colors")
+                and ms.image_label.colors is not None
+            ):
                 colors = []
                 values = []
                 for idx in range(len(ms.image_label.colors)):
@@ -583,8 +592,9 @@ class Label(Multiscales):
                 if "label_value" in features.columns:
                     features.sort_values(by="label_value", inplace=True)
                 props["features"] = features
+                props["visible"] = False
 
-            labels_layers.extend([(data, props, "labels")])
+            labels_layers.append((data, props, "labels"))
 
         return labels_layers
 
