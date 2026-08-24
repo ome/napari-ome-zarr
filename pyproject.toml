@@ -24,7 +24,7 @@ dependencies = [
     "zarr>=3.1.5",
     "requests",
     "aiohttp",
-    "ome-zarr>=0.18.0",
+    "ome-zarr>=v0.19.0a0",
 ]
 
 [project.entry-points."napari.manifest"]
