@@ -1,4 +1,3 @@
----
 name: napari-ome-zarr
 schema_version: 0.1.0
 contributions:
@@ -6,9 +5,19 @@ contributions:
     - id: napari-ome-zarr.get_reader
       title: Get Reader
       python_name: napari_ome_zarr._reader:napari_get_reader
+    - id: napari-ome-zarr.url_importer
+      title: Import OME-ZARR from URL
+      python_name: napari_ome_zarr._widgets:import_from_url
   readers:
     - command: napari-ome-zarr.get_reader
       filename_patterns:
         - "*.zarr"
         - "*.zarr*"
       accepts_directories: true
+  menus:
+    napari/file/io_utilities:
+      - command: napari-ome-zarr.url_importer
+        display_name: Import OME-ZARR from URL
+  widgets:
+    - command: napari-ome-zarr.url_importer
+      display_name: Import OME-ZARR from URL
