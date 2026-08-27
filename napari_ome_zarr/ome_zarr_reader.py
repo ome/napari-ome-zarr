@@ -357,9 +357,7 @@ class Scene(Spec):
                 scene.images[key].metadata.intrinsic_coordinate_system.name,
             )
             if target_coordinate_system is None:
-                raise ValueError(
-                    "No target_coordinate_system was provided."
-                )
+                raise ValueError("No target_coordinate_system was provided.")
             seq = scene._graph.get_sequence(
                 input_coordinate_system, target_coordinate_system, full=True
             )
