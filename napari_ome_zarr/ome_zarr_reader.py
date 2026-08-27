@@ -254,7 +254,8 @@ class Multiscales(Spec):
         has_channel = "c" in ms.images[0].axes
         channel_index = ms.images[0].axes.index("c") if has_channel else None
 
-        # Get image-specific properties (channel axis removed from scale/units/axis_labels)
+        # Get image-specific properties
+        # (channel axis removed from scale/units/axis_labels)
         props = _ome_zarr_ms_to_layer_props(ms, channel_index)
 
         # Tell napari where the channel axis is
@@ -355,6 +356,10 @@ class Scene(Spec):
                 key,
                 scene.images[key].metadata.intrinsic_coordinate_system.name,
             )
+            if target_coordinate_system is None:
+                raise ValueError(
+                    "No target_coordinate_system was provided."
+                )
             seq = scene._graph.get_sequence(
                 input_coordinate_system, target_coordinate_system, full=True
             )
