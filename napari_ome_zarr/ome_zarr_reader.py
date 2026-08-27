@@ -424,7 +424,7 @@ class Scene(Spec):
                                 "units": None,
                             }
                             for i in created_output_idxs
-                        ]
+                        ],
                     )
 
                     # update all properties except name (keep original name)
