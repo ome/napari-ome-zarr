@@ -1,8 +1,6 @@
 # zarr v3
 
-import warnings
 from abc import ABC
-from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 from xml.etree import ElementTree as ET
 
@@ -11,7 +9,6 @@ import numpy as np
 import transformnd as tnd
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
-from napari.utils.transforms import Affine
 from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
 from zarr import Group
 from zarr.core.buffer import default_buffer_prototype
@@ -156,7 +153,7 @@ def _extract_channel_props(
         colormaps = []
         ch_names = []
         visibles = []
-        contrast_limits: list[list[int]] = []
+        contrast_limits: list = []
         model = omero.get("rdefs", {}).get("model", "unset")
         greyscale = model == "greyscale"
 
@@ -187,13 +184,13 @@ def _extract_channel_props(
                         contrast_limits.append([start, end])
 
         if len(colormaps) == 1:
-            colormaps = colormaps[0]
+            colormaps = colormaps[0]  # type: ignore
         if len(visibles) == 1:
-            visibles = visibles[0]
+            visibles = visibles[0]  # type: ignore
         if len(contrast_limits) == 1:
-            contrast_limits = contrast_limits[0]
+            contrast_limits = contrast_limits[0]  # type: ignore
         if len(ch_names) == 1:
-            ch_names = ch_names[0]
+            ch_names = ch_names[0]  # type: ignore
         props = {
             "colormap": colormaps,
             "name": ch_names,
@@ -219,6 +216,9 @@ class Spec(ABC):
     def metadata(self) -> Dict[str, Any]:
         # napari layer metadata
         return {}
+
+    def to_layer_data(self) -> List[LayerData]:
+        return []
 
     def children(self) -> list["Spec"]:
         return []
@@ -310,7 +310,7 @@ class Bioformats2raw(Spec):
                 image_path = node_id.replace("Image:", "")
                 g = self.group[image_path]
                 if Multiscales.matches(g):
-                    rv.extend(Multiscales(g).to_layer_data())
+                    rv.append(Multiscales(g))
         return rv
 
     # override to NOT yield self since node has no data
@@ -424,7 +424,7 @@ class Scene(Spec):
                                 "units": None,
                             }
                             for i in created_output_idxs
-                        ],
+                        ]
                     )
 
                     # update all properties except name (keep original name)
