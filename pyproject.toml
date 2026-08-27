@@ -24,7 +24,7 @@ dependencies = [
     "zarr>=3.1.5",
     "requests",
     "aiohttp",
-    "ome-zarr>=v0.19.0a0",
+    "ome-zarr @ git+https://github.com/ome/ome-zarr-py.git",
     "transformnd>=0.6.0",
 ]
 
