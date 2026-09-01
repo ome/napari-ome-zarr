@@ -109,26 +109,27 @@ def _expand_affine_for_projection(
     Transforms before ProjectAxis need extra columns inserted so matrix
     multiplication works after the axis projection.
     """
-    transforms = seq.flatten()
+    transform_sequence_flat = seq.flatten()
 
     # Find ProjectAxis transform
     project_idx = next(
         (
             i
-            for i, tf in enumerate(transforms)
+            for i, tf in enumerate(transform_sequence_flat)
             if isinstance(tf, tnd.transforms.ProjectAxis)
         ),
         None,
     )
 
     if project_idx is None or project_idx == 0:
+        seq = tnd.TransformSequence(transform_sequence_flat.transforms[1:])
         return seq.simplify().to_affine().matrix
 
-    created_output_idxs = transforms[project_idx].created
+    created_output_idxs = transform_sequence_flat[project_idx].created
     updated_transforms = []
 
     # Expand transforms before ProjectAxis
-    for tf in transforms[:project_idx]:
+    for tf in transform_sequence_flat[:project_idx]:
         single_affine = tf.to_affine().matrix
         for output_idx in created_output_idxs:
             single_affine = np.insert(
@@ -137,7 +138,7 @@ def _expand_affine_for_projection(
         updated_transforms.append(tnd.transforms.Affine(single_affine))
 
     # Keep transforms after ProjectAxis as-is
-    updated_transforms.extend(transforms[project_idx + 1 :])
+    updated_transforms.extend(transform_sequence_flat[project_idx + 1 :])
 
     return tnd.TransformSequence(updated_transforms).simplify().to_affine().matrix
 
