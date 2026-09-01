@@ -76,9 +76,13 @@ def _ome_zarr_ms_to_layer_props(
             if "scale" in item:
                 scale.insert(item["index"], item["scale"])
             if "axis_labels" in item:
-                props["axis_labels"].insert(item["index"], item["axis_labels"])
+                axis_labels = list(props["axis_labels"])
+                axis_labels.insert(item["index"], item["axis_labels"])
+                props["axis_labels"] = tuple(axis_labels)
             if "units" in item:
-                props["units"].insert(item["index"], item["units"])
+                units = list(props["units"])
+                units.insert(item["index"], item["units"])
+                props["units"] = tuple(units)
 
     return props
 
