@@ -409,13 +409,19 @@ class Scene(Spec):
                     ),
                     None,
                 )
-                created_output_idxs = project_tf.created if project_tf else []
+                # We have two index spaces - full (for data, e.g. CZYX)
+                # vs channel-stripped (e.g., ZYX) for props (scale, axis_labels, units)
+                created_output_idxs_full = project_tf.created if project_tf else []
 
-                # need to consider channel dim which we remove from affine if present
+                # props (scale, axis_labels, units) have channel stripped, so adjust indices
+                # handle insertion before or after channel
                 if output_ch_idx is not None:
-                    created_output_idxs = [
-                        idx - 1 for idx in created_output_idxs if idx > output_ch_idx
+                    created_output_idxs_props = [
+                        idx if idx < output_ch_idx else idx - 1
+                        for idx in created_output_idxs_full
                     ]
+                else:
+                    created_output_idxs_props = created_output_idxs_full
 
                 # Insert singleton dimensions in layer data and update props
                 for idx, lyr in enumerate(_layers):
@@ -431,7 +437,7 @@ class Scene(Spec):
                                 "axis_labels": "Unknown",
                                 "units": None,
                             }
-                            for i in created_output_idxs
+                            for i in created_output_idxs_props
                         ],
                     )
 
@@ -440,8 +446,13 @@ class Scene(Spec):
                         k: v for k, v in updated_props.items() if k != "name"
                     }
 
-                    # insert singleton dimensions in layer data
-                    for out_idx in created_output_idxs:
+                    # adjust channel_axis for inserted dimensions (full indices, data has channel)
+                    if "channel_axis" in layer_props and layer_props["channel_axis"] is not None:
+                        orig_ch = layer_props["channel_axis"]
+                        layer_props["channel_axis"] = orig_ch + sum(1 for i in created_output_idxs_full if i <= orig_ch)
+
+                    # insert singleton dimensions in layer data (full indices)
+                    for out_idx in created_output_idxs_full:
                         layer_data = [
                             da.expand_dims(d, axis=out_idx) for d in layer_data
                         ]
