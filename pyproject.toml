@@ -4,7 +4,7 @@ description = "A reader for zarr backed OME-Zarr images."
 dynamic = ["version"]
 license = "BSD-3-Clause"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     {name = "OME Team"}
 ]
@@ -23,7 +23,9 @@ dependencies = [
     "napari>=0.6.0",
     "zarr>=3.1.5",
     "requests",
-    "aiohttp"
+    "aiohttp",
+    "ome-zarr @ git+https://github.com/ome/ome-zarr-py.git",
+    "transformnd>=0.6.0",
 ]
 
 [project.entry-points."napari.manifest"]
