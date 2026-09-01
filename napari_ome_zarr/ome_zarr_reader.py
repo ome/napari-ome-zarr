@@ -413,7 +413,7 @@ class Scene(Spec):
                 # vs channel-stripped (e.g., ZYX) for props (scale, axis_labels, units)
                 created_output_idxs_full = project_tf.created if project_tf else []
 
-                # props (scale, axis_labels, units) have channel stripped, so adjust indices
+                # props (scale, units, etc) have channel stripped, so adjust indices
                 # handle insertion before or after channel
                 if output_ch_idx is not None:
                     created_output_idxs_props = [
@@ -446,7 +446,8 @@ class Scene(Spec):
                         k: v for k, v in updated_props.items() if k != "name"
                     }
 
-                    # adjust channel_axis for inserted dimensions (full indices, data has channel)
+                    # adjust channel_axis for inserted dimensions
+                    # (full indices incl. channel dimension)
                     if (
                         "channel_axis" in layer_props
                         and layer_props["channel_axis"] is not None
