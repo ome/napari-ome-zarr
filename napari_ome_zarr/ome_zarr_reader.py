@@ -447,9 +447,14 @@ class Scene(Spec):
                     }
 
                     # adjust channel_axis for inserted dimensions (full indices, data has channel)
-                    if "channel_axis" in layer_props and layer_props["channel_axis"] is not None:
+                    if (
+                        "channel_axis" in layer_props
+                        and layer_props["channel_axis"] is not None
+                    ):
                         orig_ch = layer_props["channel_axis"]
-                        layer_props["channel_axis"] = orig_ch + sum(1 for i in created_output_idxs_full if i <= orig_ch)
+                        layer_props["channel_axis"] = orig_ch + sum(
+                            1 for i in created_output_idxs_full if i <= orig_ch
+                        )
 
                     # insert singleton dimensions in layer data (full indices)
                     for out_idx in created_output_idxs_full:
