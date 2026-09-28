@@ -285,16 +285,15 @@ class TestPlates:
 
     def test_read_plate(self):
         layers = napari_get_reader(str(self.plate_path))()
-        assert len(layers) == 1
+        assert len(layers) == self.sizec
         plate = layers[0]
         data, metadata, layer_type = plate
         assert data[0].shape == (
-            self.sizec,
             self.sizez,
             self.sizey * len(self.row_names),
             self.sizex * len(self.col_names),
         )
-        assert metadata["axis_labels"] == ("field", "z", "y", "x")
+        assert metadata["axis_labels"] == ("z", "y", "x")
 
         # check plate compared with an Image
         well_path = self.plate_path / self.well_paths[0] / "0"
@@ -325,14 +324,14 @@ class TestPlates:
                     well_coord_y = tiley * row_idx
                     well_coord_x = tilex * col_idx
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        data_n[0, well_coord_y, well_coord_x].compute()
                         == expected_pixel_val
                     )
                     # check pixel in centre of each Well - same value
                     well_coord_y = tiley * row_idx + tiley // 2
                     well_coord_x = tilex * col_idx + tilex // 2
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        data_n[0, well_coord_y, well_coord_x].compute()
                         == expected_pixel_val
                     )
 

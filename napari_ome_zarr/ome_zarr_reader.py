@@ -496,22 +496,41 @@ class Plate(Spec):
         # we want to return a dask pyramid...
         return get_pyramid_lazy(self.group)
 
-    def metadata(self) -> dict:
-        well_group = get_first_well(self.group)
-        first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        return Multiscales(image_group).to_layer_data()[0][1]
-
     def to_layer_data(self) -> List[LayerData]:
         data = self.data()
-        metadata = self.metadata()
 
-        # need to add a new axis for the channel dimension
-        # to account for the additional dimension added here
-        if "units" in metadata:
-            metadata["units"] = tuple(["pixel"] + list(metadata["units"]))
-        metadata["axis_labels"] = tuple(["field"] + list(metadata["axis_labels"]))
-        layers: List[LayerData] = [(data, metadata, "image")]
+        # get metadata information of a single well
+        well_group = get_first_well(self.group)
+        first_field_path = get_first_field_path(well_group)
+        img = OMEZarrMultiscale.from_ome_zarr(well_group[first_field_path])
+
+        axes_types = tuple(img.images[0].axes_types.values())
+        has_channel = "channel" in axes_types
+        channel_index = axes_types.index("channel") if has_channel else None
+        n_channels = (
+            int(img.images[0].data.shape[channel_index]) if has_channel else 1
+        )
+
+        base_props = _ome_zarr_multiscales_to_layer_props(
+            img, channel_index=channel_index
+        )
+        channel_properties = _extract_channel_props(img)
+
+        layers: List[LayerData] = []
+        for ch_idx in range(n_channels):
+            ch_data = (
+                [da.take(d, ch_idx, axis=channel_index) for d in data]
+                if channel_index is not None
+                else data
+            )
+
+            props = dict(base_props)
+            props["blending"] = "additive"
+            if channel_properties is not None:
+                props.update(channel_properties[ch_idx])
+
+            layers.append((ch_data, props, "image"))
+
         for child in self.children():
             layers.extend(child.to_layer_data())
         return layers
