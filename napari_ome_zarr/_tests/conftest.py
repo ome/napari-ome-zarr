@@ -15,7 +15,6 @@ from skimage import data
 
 
 def create_overlap_tiles_scene(tmp_path):
-
     """
     Write a scene with four overlapping tiles of a 2D image to `path`.
     """
@@ -213,6 +212,7 @@ def scene_path(request, tmp_path):
 def image_path(request, tmp_path):
     """Path to a locally-built OME-Zarr image, with and without labels."""
     return request.param(tmp_path / "image.zarr")
+
 
 @pytest.fixture
 def plate_path(tmp_path):
