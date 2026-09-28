@@ -1,5 +1,7 @@
 import pytest
-from napari_ome_zarr._tests.conftest import _plain_image, _image_with_labels
+
+from napari_ome_zarr._tests.conftest import _image_with_labels, _plain_image
+
 
 @pytest.mark.parametrize(
     "build, n_image_layers, n_label_layers",
@@ -10,6 +12,7 @@ from napari_ome_zarr._tests.conftest import _plain_image, _image_with_labels
 )
 def test_counting_image_layers(build, n_image_layers, n_label_layers, tmp_path):
     from ome_zarr import OMEZarrMultiscale
+
     from napari_ome_zarr.utils import count_layers_in_image
 
     path = build(tmp_path / "image.zarr")

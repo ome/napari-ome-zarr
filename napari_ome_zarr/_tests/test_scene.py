@@ -1,8 +1,9 @@
+import numpy as np
+from ome_zarr import OMEZarrScene
+
 from napari_ome_zarr._tests.conftest import create_overlap_tiles_scene
 from napari_ome_zarr.utils import count_layers_in_scene
 
-from ome_zarr import OMEZarrScene
-import numpy as np
 
 def test_scene_in_napari(scene_path, make_napari_viewer):
     from napari.layers import Image, Labels

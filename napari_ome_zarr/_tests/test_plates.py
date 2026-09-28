@@ -8,4 +8,5 @@ def test_plates(plate_path, make_napari_viewer):
 
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__])

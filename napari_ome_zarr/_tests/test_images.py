@@ -1,4 +1,4 @@
-from napari_ome_zarr._tests.conftest import create_overlap_tiles_scene, bioformats2raw
+from napari_ome_zarr._tests.conftest import bioformats2raw, create_overlap_tiles_scene
 from napari_ome_zarr.utils import count_layers_in_scene
 
 

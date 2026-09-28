@@ -15,8 +15,8 @@ from ome_zarr.writer import (
 )
 
 from napari_ome_zarr._reader import napari_get_reader
-from napari_ome_zarr.utils import count_layers_in_image
 from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
+from napari_ome_zarr.utils import count_layers_in_image
 
 
 class TestNapari:
