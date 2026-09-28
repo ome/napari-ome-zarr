@@ -507,9 +507,7 @@ class Plate(Spec):
         axes_types = tuple(img.images[0].axes_types.values())
         has_channel = "channel" in axes_types
         channel_index = axes_types.index("channel") if has_channel else None
-        n_channels = (
-            int(img.images[0].data.shape[channel_index]) if has_channel else 1
-        )
+        n_channels = int(img.images[0].data.shape[channel_index]) if has_channel else 1
 
         base_props = _ome_zarr_multiscales_to_layer_props(
             img, channel_index=channel_index
