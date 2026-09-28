@@ -227,6 +227,6 @@ def plate_path(tmp_path):
         image=np.ones((1, 1, 8, 8), dtype=np.uint8),
         group=image_group,
         axes="czyx",
-        scale_factors=[],  # 8x8 too small for default (2,4,8,16) pyramid
+        scale_factors=[2],  # 8x8 too small for default (2,4,8,16) pyramid
     )
     return path
