@@ -215,7 +215,6 @@ def _image_with_weird_axes(path):
     return path
 
 
-
 def bioformats2raw():
     """
     Return the path to a bioformats2raw converted OME-Zarr dataset.

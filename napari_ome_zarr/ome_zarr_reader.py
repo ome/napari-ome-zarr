@@ -81,13 +81,8 @@ def _ome_zarr_multiscales_to_layer_props(
         ]
         props["units"] = tuple(units)
 
-
     props["axis_labels"] = tuple(
-        [
-            ax
-            for ax in level_0.axes
-            if level_0.axes_types.get(ax, None) != "channel"
-        ]
+        [ax for ax in level_0.axes if level_0.axes_types.get(ax, None) != "channel"]
     )
     props["name"] = multiscales.name
     props["scale"] = scale
