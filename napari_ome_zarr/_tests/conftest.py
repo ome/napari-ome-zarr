@@ -191,6 +191,31 @@ def _image_with_labels(path):
     return path
 
 
+def _image_with_weird_axes(path):
+    """
+    This image is to test that we can work with images that have non-standard axes,
+    as long as the axes types are correctly set.
+    """
+    random_data = np.random.rand(1, 16, 16)
+
+    oz_img = OMEZarrImage(
+        data=random_data,
+        axes=["weird", "y", "x"],
+        axes_types={"weird": "channel", "y": "space", "x": "space"},
+        scale={"weird": 1, "y": 1, "x": 1},
+        name="weird_axes",
+    )
+
+    oz_ms = OMEZarrMultiscale(
+        image=oz_img,
+    )
+
+    path = path / "image_with_weird_axes.zarr"
+    oz_ms.to_ome_zarr(str(path), overwrite=True)
+    return path
+
+
+
 def bioformats2raw():
     """
     Return the path to a bioformats2raw converted OME-Zarr dataset.
@@ -208,7 +233,7 @@ def scene_path(request, tmp_path):
     return request.param(tmp_path)
 
 
-@pytest.fixture(params=[_plain_image, _image_with_labels])
+@pytest.fixture(params=[_plain_image, _image_with_labels, _image_with_weird_axes])
 def image_path(request, tmp_path):
     """Path to a locally-built OME-Zarr image, with and without labels."""
     return request.param(tmp_path / "image.zarr")
