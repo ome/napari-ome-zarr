@@ -70,17 +70,27 @@ def _ome_zarr_multiscales_to_layer_props(
         s[:channel_index] + s[channel_index + 1 :] if channel_index is not None else s
     )
     props: Dict[str, Any] = {}
-    if multiscales.images[0].axes_units:
+
+    # get first resolution level as a proxy for correct axes descriptors
+    level_0 = multiscales.images[0]
+    if level_0.axes_units:
         units = [
-            multiscales.images[0].axes_units.get(ax, "pixel")
-            for ax in multiscales.images[0].axes
-            if ax != "c"
+            level_0.axes_units.get(ax, "pixel")
+            for ax in level_0.axes
+            if level_0.axes_types.get(ax, None) != "channel"
         ]
         props["units"] = tuple(units)
 
-    props["axis_labels"] = tuple([ax for ax in multiscales.images[0].axes if ax != "c"])
-    props["scale"] = scale
+
+    props["axis_labels"] = tuple(
+        [
+            ax
+            for ax in level_0.axes
+            if level_0.axes_types.get(ax, None) != "channel"
+        ]
+    )
     props["name"] = multiscales.name
+    props["scale"] = scale
 
     return props
 

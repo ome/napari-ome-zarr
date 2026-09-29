@@ -27,8 +27,8 @@ def count_layers_in_image(image: OMEZarrMultiscale) -> dict:
     n_label_layers: int = 0
     img = image.images[0]
 
-    if "c" in img.axes:
-        ch_axis = "".join(img.axes).find("c")
+    if "channel" in img.axes_types.values():
+        ch_axis = list(img.axes_types.values()).index("channel")
         n_channels = int(img.data.shape[ch_axis])
         n_image_layers += n_channels
     else:
