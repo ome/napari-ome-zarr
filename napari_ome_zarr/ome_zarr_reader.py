@@ -497,12 +497,8 @@ class Plate(Spec):
     def matches(group: Group) -> bool:
         return "plate" in Spec.get_attrs(group)
 
-    def data(self) -> list[da.core.Array]:
-        # we want to return a dask pyramid...
-        return get_pyramid_lazy(self.group)
-
     def to_layer_data(self) -> List[LayerData]:
-        data = self.data()
+        data = get_pyramid_lazy(self.group)
 
         # get metadata information of a single well
         well_group = get_first_well(self.group)
@@ -534,56 +530,28 @@ class Plate(Spec):
 
             layers.append((ch_data, props, "image"))
 
-        for child in self.children():
-            layers.extend(child.to_layer_data())
+        # check if labels exist and append them as layers
+        if hasattr(img, "labels") and img.labels is not None:
+            label_group = well_group[first_field_path].get("labels")
+            for label_name, label_img in img.labels.items():
+                labels_data = get_pyramid_lazy(self.group, labels_path=label_name)
+                labels_metadata = Label(label_group[label_name]).to_layer_data()[0][1]
+
+                axes_types = tuple(label_img.images[0].axes_types.values())
+                has_channel = "channel" in axes_types
+                channel_index = axes_types.index("channel") if has_channel else None
+                n_channels = int(label_img.images[0].data.shape[channel_index]) if has_channel else 1
+
+                for ch_idx in range(n_channels):
+                    ch_labels_data = (
+                        [da.take(d, ch_idx, axis=channel_index) for d in labels_data]
+                        if channel_index is not None
+                        else labels_data
+                    )
+
+                    layers.append((ch_labels_data, labels_metadata, "labels"))
+
         return layers
-
-    def children(self) -> list[Spec]:
-        # Plate has children If it has labels - check one Well...
-        # Child is PlateLabels
-        well_group = get_first_well(self.group)
-        first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        labels_group = image_group.get("labels", None)
-        if labels_group is not None:
-            labels_attrs = Spec.get_attrs(labels_group)
-            if "labels" in labels_attrs:
-                ch: list[Spec] = []
-                for labels_path in labels_attrs["labels"]:
-                    ch.append(PlateLabels(self.group, labels_path=labels_path))
-                return ch
-        return []
-
-
-class PlateLabels(Plate):
-    def __init__(self, group: Group, labels_path: str):
-        super().__init__(group)
-        self.labels_path = labels_path
-
-    def data(self) -> list[da.core.Array]:
-        # return a dask pyramid...
-        return get_pyramid_lazy(self.group, self.labels_path)
-
-    def children(self) -> list[Spec]:
-        # Need to override Plate.children()
-        return []
-
-    def to_layer_data(self) -> List[LayerData]:
-        return [(self.data(), self.metadata(), "labels")]
-
-    def metadata(self) -> dict:
-        # override Plate metadata (no channel-axis etc)
-        well_group = get_first_well(self.group)
-        first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        labelimage_group = image_group["labels"][self.labels_path]
-        m = Label(labelimage_group).metadata()
-        rv: dict[str, Any] = {"scale": m.get("scale", None)}
-        if "axis_labels" in m:
-            rv["axis_labels"] = m["axis_labels"]
-        if "units" in m:
-            rv["units"] = m["units"]
-        return rv
 
 
 class Labels(Spec):
