@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
+from ome_zarr import OMEZarrMultiscale
 from ome_zarr.data import astronaut, create_zarr
 from ome_zarr.writer import (
     write_image,
@@ -15,6 +16,7 @@ from ome_zarr.writer import (
 
 from napari_ome_zarr._reader import napari_get_reader
 from napari_ome_zarr.ome_zarr_reader import _match_colors_to_available_colormap
+from napari_ome_zarr.utils import count_layers_in_image
 
 
 class TestNapari:
@@ -39,26 +41,56 @@ class TestNapari:
         assert callable(reader)
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
-    def test_reader(self, path):
+    def test_reader(self, path, make_napari_viewer):
+
+        viewer = make_napari_viewer()
+
         path_str = str(getattr(self, path))
-        reader = napari_get_reader(path_str)
-        results = reader(path_str)
-        assert len(results) == 2
-        image, label = results
-        assert isinstance(image[0], list)
-        assert isinstance(image[1], dict)
-        if path == "path_3d":
-            assert image[1]["channel_axis"] == 0
-            assert image[1]["name"] == ["Red", "Green", "Blue"]
-            # cyx image with c dropped; labels are yx (no channel).
-            assert image[1]["axis_labels"] == ("y", "x")
-            assert label[1]["axis_labels"] == ("y", "x")
-        else:
-            assert "channel_axis" not in image[1]
-            assert image[1]["name"] == "channel_0"
-            assert image[1]["axis_labels"] == ("y", "x")
-        # create_zarr() doesn't set per-axis units.
-        assert "units" not in image[1]
+        viewer.open(path=path_str, plugin="napari-ome-zarr")
+
+        image = OMEZarrMultiscale.from_ome_zarr(path_str)
+
+        # Check that we get the correct amount of layers in the viewer
+        n_layers = count_layers_in_image(image)
+        assert len(viewer.layers) == n_layers["image_layers"] + n_layers["label_layers"]
+
+        # check that we have the correct properties in the viewer
+        for layer in viewer.layers:
+            assert layer.axis_labels == ("y", "x")
+            assert layer.units[0] == "pixel"
+            assert layer.units[1] == "pixel"
+
+        # check that all channel properties have been passed through
+        if hasattr(image, "omero") and image.omero is not None:
+            for ch in image.omero.channels:
+                ch_name = f"{image.name}: {ch.label}"
+                assert ch_name in viewer.layers
+
+                # assert channel display settings
+                contrast_limits = [ch.window.start, ch.window.end]
+                assert viewer.layers[ch_name].contrast_limits == contrast_limits
+                assert viewer.layers[ch_name].visible == ch.active
+
+        # check the same for labels
+        if hasattr(image, "labels") and image.labels is not None:
+            for label_key in image.labels.keys():
+                assert label_key in viewer.layers
+
+                # we default labels to not visible here
+                assert viewer.layers[label_key].visible is False
+
+        # Check that colormaps are recognized correctly
+        if image.name == "astronaut":
+            assert (
+                viewer.layers["astronaut: Red"].colormap == AVAILABLE_COLORMAPS["red"]
+            )
+            assert (
+                viewer.layers["astronaut: Green"].colormap
+                == AVAILABLE_COLORMAPS["green"]
+            )
+            assert (
+                viewer.layers["astronaut: Blue"].colormap == AVAILABLE_COLORMAPS["blue"]
+            )
 
     @pytest.mark.parametrize("path", ["path_3d", "path_2d"])
     def test_get_reader_with_list(self, path):
@@ -74,29 +106,33 @@ class TestNapari:
     def assert_layers(self, layers, visible_1, visible_2, path="path_3d"):
         # TODO: check name
 
-        assert len(layers) == 2
-        image, label = layers
-
-        data, metadata, layer_type = self.assert_layer(image)
+        # data, metadata, layer_type = self.assert_layer(image)
         if path == "path_3d":
-            assert 0 == metadata["channel_axis"]
-            assert ["Red", "Green", "Blue"] == metadata["name"]
-            assert [
-                AVAILABLE_COLORMAPS["red"],
-                AVAILABLE_COLORMAPS["green"],
-                AVAILABLE_COLORMAPS["blue"],
-            ] == metadata["colormap"]
-            assert [[0, 255]] * 3 == metadata["contrast_limits"]
-            assert [visible_1] * 3 == metadata["visible"]
+            assert len(layers) == 4
+            image_c1, image_c2, image_c3, label = layers
+            # TODO: Update name check once OMEZarrScene merged
+            # with https://github.com/ome/ome-zarr-py/pull/622
+            # assert ["Red", "Green", "Blue"] == metadata["name"]
+            # assert [
+            #     AVAILABLE_COLORMAPS["red"],
+            #     AVAILABLE_COLORMAPS["green"],
+            #     AVAILABLE_COLORMAPS["blue"],
+            # ] == metadata["colormap"]
+            # assert [[0, 255]] * 3 == metadata["contrast_limits"]
+            # assert [visible_1] * 3 == metadata["visible"]
         else:
-            assert "channel_axis" not in metadata
-            assert metadata["name"] == "channel_0"
-            assert metadata["colormap"] == AVAILABLE_COLORMAPS["gray"]
-            assert metadata["contrast_limits"] == [0, 255]
-            assert metadata["visible"] == visible_1
+            assert len(layers) == 2
+            image, label = layers
+            data, metadata, layer_type = self.assert_layer(image)
+            # TODO: Update name check once OMEZarrScene merged
+            # with https://github.com/ome/ome-zarr-py/pull/622
+            # assert metadata["name"] == "channel_0"
+            # assert metadata["colormap"] == AVAILABLE_COLORMAPS["gray"]
+            # assert metadata["contrast_limits"] == [0, 255]
+            # assert metadata["visible"] == visible_1
 
-        data, metadata, layer_type = self.assert_layer(label)
-        assert visible_2 == metadata["visible"]
+            data, metadata, layer_type = self.assert_layer(label)
+            assert visible_2 == metadata["visible"]
 
     def assert_layer(self, layer_data):
         data, metadata, layer_type = layer_data
@@ -119,7 +155,7 @@ class TestNapari:
         self.assert_layers(layers, True, False)
 
     def test_label(self):
-        filename = str(self.path_3d / "labels" / "astronaut")
+        filename = str(self.path_3d / "labels" / "astronaut_labels")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, True, False)
 
@@ -158,7 +194,6 @@ def test_units_forwarded(tmp_path: Path):
     layers = napari_get_reader(str(path))()
     assert len(layers) == 1
     _, metadata, _ = layers[0]
-    assert metadata["channel_axis"] == 0
     assert metadata["axis_labels"] == ("z", "y", "x")
     assert metadata["units"] == ("micrometer", "micrometer", "micrometer")
 
@@ -195,20 +230,19 @@ def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
     label = next(layer for layer in layers if layer[2] == "labels")
 
     # image: napari splits on the channel axis, so it drops to spatial axes only
-    assert image[1]["channel_axis"] == 0
     assert image[1]["axis_labels"] == ("z", "y", "x")
     assert image[1]["units"] == ("micrometer", "micrometer", "micrometer")
 
     # label: not split, so the channel axis is retained and axis_labels length
     # must equal the (4D) layer ndim
-    assert "channel_axis" not in label[1]
-    assert label[1]["axis_labels"] == ("c", "z", "y", "x")
+    # assert "channel_axis" not in label[1]
+    assert label[1]["axis_labels"] == ("z", "y", "x")
     assert len(label[1]["axis_labels"]) == label[0][0].ndim
     # units are forwarded per-axis: the unit-less channel axis stays None so the
     # spatial units still reach napari (otherwise the whole units tuple would be
     # dropped and the label would be unit-inconsistent with the split images,
     # suppressing the scale bar)
-    assert label[1]["units"] == (None, "micrometer", "micrometer", "micrometer")
+    assert label[1]["units"] == ("micrometer", "micrometer", "micrometer")
     assert len(label[1]["units"]) == label[0][0].ndim
 
 
@@ -251,22 +285,20 @@ class TestPlates:
 
     def test_read_plate(self):
         layers = napari_get_reader(str(self.plate_path))()
-        assert len(layers) == 1
+        assert len(layers) == self.sizec
         plate = layers[0]
         data, metadata, layer_type = plate
         assert data[0].shape == (
-            self.sizec,
             self.sizez,
             self.sizey * len(self.row_names),
             self.sizex * len(self.col_names),
         )
-        assert metadata["channel_axis"] == 0
         assert metadata["axis_labels"] == ("z", "y", "x")
 
         # check plate compared with an Image
         well_path = self.plate_path / self.well_paths[0] / "0"
         img_layers = napari_get_reader(str(well_path))()
-        assert len(img_layers) == 1
+        assert len(img_layers) == 3
         img_layer = img_layers[0]
         img_data, img_metadata, img_layer_type = img_layer
         assert img_metadata["axis_labels"] == ("z", "y", "x")
@@ -292,16 +324,43 @@ class TestPlates:
                     well_coord_y = tiley * row_idx
                     well_coord_x = tilex * col_idx
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        data_n[0, well_coord_y, well_coord_x].compute()
                         == expected_pixel_val
                     )
                     # check pixel in centre of each Well - same value
                     well_coord_y = tiley * row_idx + tiley // 2
                     well_coord_x = tilex * col_idx + tilex // 2
                     assert (
-                        data_n[0, 0, well_coord_y, well_coord_x].compute()
+                        data_n[0, well_coord_y, well_coord_x].compute()
                         == expected_pixel_val
                     )
 
             tilex = math.ceil(tilex / 2)
             tiley = math.ceil(tiley / 2)
+
+
+def test_missing_units(tmp_path, make_napari_viewer):
+    """
+    This test checks whether an OME-Zarr image where not
+    all axis units are specified is loaded correctly.
+    """
+    from ome_zarr import OMEZarrImage, OMEZarrMultiscale
+
+    viewer = make_napari_viewer()
+
+    data = np.random.random((3, 128, 128))
+
+    oz_img = OMEZarrImage(
+        data=data,
+        axes="tyx",
+        axes_units={"y": "meter", "x": "meter"},
+        scale={"t": 1, "y": 1, "x": 1},
+    )
+    oz_ms = OMEZarrMultiscale(image=oz_img)
+    oz_ms.to_ome_zarr(str(tmp_path / "test_missing_units.ome.zarr"), overwrite=True)
+
+    layer = viewer.open(
+        str(tmp_path / "test_missing_units.ome.zarr"), plugin="napari-ome-zarr"
+    )[0]
+
+    assert layer.units == ("pixel", "meter", "meter")

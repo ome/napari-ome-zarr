@@ -4,7 +4,7 @@ description = "A reader for zarr backed OME-Zarr images."
 dynamic = ["version"]
 license = "BSD-3-Clause"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     {name = "OME Team"}
 ]
@@ -14,16 +14,30 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
     "napari>=0.6.0",
     "zarr>=3.1.5",
     "requests",
-    "aiohttp"
+    "aiohttp",
+    "ome-zarr>=0.19.2",
+    "transformnd>=0.6.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-xvfb ; sys_platform == 'linux'",
+    "magicgui",
+    "pooch",
+    "pytest-qt",
+    "qtpy",
+    "pyqt5",
 ]
 
 [project.entry-points."napari.manifest"]
