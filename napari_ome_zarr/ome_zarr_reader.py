@@ -30,6 +30,10 @@ AXES_5D = [
     {"name": "x", "type": "space"},
 ]
 
+DEFAULT_SCALE = 1.0
+DEFAULT_UNIT = "pixel"
+DEFAULT_AXIS_LABEL = "Unknown"
+
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     """Helper function to match Colormap to an existing napari Colormap.
@@ -48,15 +52,17 @@ def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
     return custom_cmap
 
 
-def _ome_zarr_ms_to_layer_props(
+def _ome_zarr_multiscales_to_layer_props(
     multiscales: OMEZarrMultiscale | OMEZarrLabels,
     channel_index: int | None,
-    inserted_defaults: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """
     Helper function to extract properties from an OME-Zarr
-    multiscale or label images that would apply to all channels
-    (if present) alike.
+    multiscale that can be forwarded to a napari layer,
+    irrespective of whether this layer is a image or labels layer.
+
+    The channel dimension is omitted because it is split into
+    different layers.
     """
 
     # get scale (same for all channels)
@@ -65,30 +71,22 @@ def _ome_zarr_ms_to_layer_props(
         s[:channel_index] + s[channel_index + 1 :] if channel_index is not None else s
     )
     props: Dict[str, Any] = {}
-    if multiscales.images[0].axes_units:
+
+    # get first resolution level as a proxy for correct axes descriptors
+    level_0 = multiscales.images[0]
+    if level_0.axes_units:
         units = [
-            multiscales.images[0].axes_units.get(ax, "pixel")
-            for ax in multiscales.images[0].axes
-            if ax != "c"
+            level_0.axes_units.get(ax, "pixel")
+            for ax in level_0.axes
+            if level_0.axes_types.get(ax, None) != "channel"
         ]
         props["units"] = tuple(units)
 
-    props["axis_labels"] = tuple([ax for ax in multiscales.images[0].axes if ax != "c"])
-    props["scale"] = scale
+    props["axis_labels"] = tuple(
+        [ax for ax in level_0.axes if level_0.axes_types.get(ax, None) != "channel"]
+    )
     props["name"] = multiscales.name
-
-    if inserted_defaults is not None:
-        for item in inserted_defaults:
-            if "scale" in item and "scale" in props:
-                scale.insert(item["index"], item["scale"])
-            if "axis_labels" in item and "axis_labels" in props:
-                axis_labels = list(props["axis_labels"])
-                axis_labels.insert(item["index"], item["axis_labels"])
-                props["axis_labels"] = tuple(axis_labels)
-            if "units" in item and "units" in props:
-                units = list(props["units"])
-                units.insert(item["index"], item["units"])
-                props["units"] = tuple(units)
+    props["scale"] = scale
 
     return props
 
@@ -326,9 +324,9 @@ class Multiscales(Spec):
 
         data = [img.data for img in ms.images]
 
-        has_channel = "c" in ms.images[0].axes
-        if has_channel:
-            channel_index = ms.images[0].axes.index("c")
+        axes_types = tuple(ms.images[0].axes_types.values())
+        if "channel" in axes_types:
+            channel_index = axes_types.index("channel")
             n_channels = int(ms.images[0].data.shape[channel_index])
         else:
             channel_index = None
@@ -340,11 +338,11 @@ class Multiscales(Spec):
         for ch_idx in range(n_channels):
             data = (
                 [da.take(img.data, ch_idx, axis=channel_index) for img in ms.images]
-                if has_channel
+                if channel_index is not None
                 else [img.data for img in ms.images]
             )
 
-            props = _ome_zarr_ms_to_layer_props(ms, channel_index)
+            props = _ome_zarr_multiscales_to_layer_props(ms, channel_index)
             props["name"] = ms.name
             props["blending"] = "additive"
             if channel_properties is not None:
@@ -363,17 +361,6 @@ class Multiscales(Spec):
                 lyr[1]["affine"] = affine
 
         return layers
-
-    def _splits_channels(self) -> bool:
-        """Whether a channel axis is turned into separate napari layers.
-
-        Images split into one layer per channel via ``channel_axis``, so the
-        channel axis is dropped from the per-axis metadata (axis_labels, units,
-        scale, translate) to match each split layer's reduced ndim. Labels keep
-        every axis in a single layer and so must keep the channel axis (see
-        ``Label._splits_channels``).
-        """
-        return True
 
 
 class Bioformats2raw(Spec):
@@ -414,14 +401,6 @@ class Bioformats2raw(Spec):
             yield from child.iter_nodes()
 
 
-def cs_path_name(in_out: dict) -> str:
-    # helper to get [path/]name from 'input' or 'output' dict
-    name = in_out["name"]
-    if "path" in in_out:
-        name = in_out["path"] + "/" + name
-    return name
-
-
 class Scene(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -435,7 +414,7 @@ class Scene(Spec):
         scene = OMEZarrScene.from_ome_zarr(self.group)
         all_cs = scene.get_coordinate_system()
 
-        if all_cs:
+        if all_cs and target_coordinate_system is None:
             # Get first coordinate system (sorted for determinism)
             first_cs_key = next(iter(sorted(all_cs.keys())))
             target_coordinate_system = first_cs_key
@@ -464,13 +443,11 @@ class Scene(Spec):
                 seq = scene._graph.get_sequence(
                     input_coordinate_system, target_coordinate_system, full=True
                 )
-                affine = seq.simplify().to_affine().matrix
             else:
                 # Identity affine if no transformation is needed
                 seq = tnd.TransformSequence(
                     transforms=[tnd.transforms.Identity(ndim=len(input_cs_obj.axes))]
                 )
-                affine = np.eye(len(input_cs_obj.axes) + 1)
 
             # Expand data if output has more spatial dims than input
             input_spatial = [
@@ -492,18 +469,34 @@ class Scene(Spec):
                 else None
             )
 
-            # ProjectAxis is the only transform that changes dimensionality; a
-            # plain to_affine() on the composed sequence can't represent that
-            # shape change, so route through the expansion helper whenever it's
-            # present - regardless of whether it created spatial dims, a
-            # channel dim, or both (fixes non-square affine when the input has
-            # no channel axis but the output does).
-            transforms = seq.flatten()
-            project_tf = next(
-                (tf for tf in transforms if isinstance(tf, tnd.transforms.ProjectAxis)),
-                None,
-            )
-            if project_tf is not None:
+            # Check whether  the transformation can be represented
+            # as an affine matrix
+            affine_obj = seq.simplify().to_affine()
+
+            if affine_obj is None:
+                raise ValueError(
+                    "Affine transformation could not be computed."
+                    f"for transform sequence {seq}"
+                )
+
+            # ProjectAxis is the only transform that changes dimensionality;
+            # If an affine matrix is non-square, a projectAxis transform
+            # must exist in the transform sequence. The projectAxis transform is handled
+            # here by broadcasting the array to match the output dimensionality.
+            # Hence, we need to identify the ProjectAxis transform and expand the
+            # affine matrices in the sequence accordingly.
+            project_tf = None
+            if affine_obj.matrix.shape[0] == affine_obj.matrix.shape[1]:
+                affine = affine_obj.matrix
+            else:
+                project_tf = next(
+                    (
+                        tf
+                        for tf in seq.flatten()
+                        if isinstance(tf, tnd.transforms.ProjectAxis)
+                    ),
+                    None,
+                )
                 affine = _expand_affine_for_projection(seq)
 
             n_extra = len(output_spatial) - len(input_spatial)
@@ -518,27 +511,32 @@ class Scene(Spec):
                     if output_cs_obj.axes[i].type == "space"
                 ]
 
-                # Insert singleton dimensions in layer data and update props
+                # Insert singleton dimensions in layer data and update props.
+                # TODO: Currently, we assume that labels share the image's spatial
+                # scale/units. This MAY not hold in the future.
                 for idx, lyr in enumerate(_layers):
                     layer_data = lyr[0]
                     layer_props = lyr[1]
-                    updated_props = _ome_zarr_ms_to_layer_props(
-                        ms,
-                        input_ch_index,
-                        inserted_defaults=[
-                            {
-                                "index": i,
-                                "scale": 1.0,
-                                "axis_labels": "Unknown",
-                                "units": None,
-                            }
-                            for i in created_output_idxs
-                        ],
+                    updated_properties = _ome_zarr_multiscales_to_layer_props(
+                        ms, input_ch_index
                     )
+                    # created dims have no real scale/axis label/unit - fill in
+                    # placeholders at their position in the output CS
+                    for i in created_output_idxs:
+                        if "scale" in updated_properties:
+                            updated_properties["scale"].insert(i, DEFAULT_SCALE)
+                        if "axis_labels" in updated_properties:
+                            axis_labels = list(updated_properties["axis_labels"])
+                            axis_labels.insert(i, DEFAULT_AXIS_LABEL)
+                            updated_properties["axis_labels"] = tuple(axis_labels)
+                        if "units" in updated_properties:
+                            units = list(updated_properties["units"])
+                            units.insert(i, DEFAULT_UNIT)
+                            updated_properties["units"] = tuple(units)
 
                     # update all properties except name (keep original name)
                     layer_props |= {
-                        k: v for k, v in updated_props.items() if k != "name"
+                        k: v for k, v in updated_properties.items() if k != "name"
                     }
 
                     for out_idx in created_output_idxs:
@@ -571,79 +569,77 @@ class Plate(Spec):
     def matches(group: Group) -> bool:
         return "plate" in Spec.get_attrs(group)
 
-    def data(self) -> list[da.core.Array]:
-        # we want to return a dask pyramid...
-        return get_pyramid_lazy(self.group)
-
-    def metadata(self) -> dict:
-        well_group = get_first_well(self.group)
-        first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        return Multiscales(image_group).to_layer_data()[0][1]
-
     def to_layer_data(self) -> List[LayerData]:
-        data = self.data()
-        metadata = self.metadata()
+        data = get_pyramid_lazy(self.group)
 
-        # need to add a new axis for the channel dimension
-        # to account for the additional dimension added here
-        if "units" in metadata:
-            metadata["units"] = tuple(["pixel"] + list(metadata["units"]))
-        metadata["axis_labels"] = tuple(["field"] + list(metadata["axis_labels"]))
-        return [(data, metadata, "image")]
-
-    def children(self) -> list[Spec]:
-        # Plate has children If it has labels - check one Well...
-        # Child is PlateLabels
+        # get metadata information of a single well
         well_group = get_first_well(self.group)
         first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        labels_group = image_group.get("labels", None)
-        if labels_group is not None:
-            labels_attrs = Spec.get_attrs(labels_group)
-            if "labels" in labels_attrs:
-                ch: list[Spec] = []
-                for labels_path in labels_attrs["labels"]:
-                    ch.append(PlateLabels(self.group, labels_path=labels_path))
-                return ch
-        return []
+        img = OMEZarrMultiscale.from_ome_zarr(well_group[first_field_path])
 
+        axes_types = tuple(img.images[0].axes_types.values())
+        has_channel = "channel" in axes_types
+        channel_index = axes_types.index("channel") if has_channel else None
+        n_channels = int(img.images[0].data.shape[channel_index]) if has_channel else 1
 
-class PlateLabels(Plate):
-    def __init__(self, group: Group, labels_path: str):
-        super().__init__(group)
-        self.labels_path = labels_path
+        base_props = _ome_zarr_multiscales_to_layer_props(
+            img, channel_index=channel_index
+        )
+        channel_properties = _extract_channel_props(img)
 
-    def data(self) -> list[da.core.Array]:
-        # return a dask pyramid...
-        return get_pyramid_lazy(self.group, self.labels_path)
+        layers: List[LayerData] = []
+        for ch_idx in range(n_channels):
+            ch_data = (
+                [da.take(d, ch_idx, axis=channel_index) for d in data]
+                if channel_index is not None
+                else data
+            )
 
-    def children(self) -> list[Spec]:
-        # Need to override Plate.children()
-        return []
+            props = dict(base_props)
+            props["blending"] = "additive"
+            if channel_properties is not None:
+                props.update(channel_properties[ch_idx])
 
-    def to_layer_data(self) -> List[LayerData]:
-        return [(self.data(), self.metadata(), "labels")]
+            layers.append((ch_data, props, "image"))
 
-    def metadata(self) -> dict:
-        # override Plate metadata (no channel-axis etc)
-        well_group = get_first_well(self.group)
-        first_field_path = get_first_field_path(well_group)
-        image_group = well_group[first_field_path]
-        labelimage_group = image_group["labels"][self.labels_path]
-        m = Label(labelimage_group).metadata()
-        rv: dict[str, Any] = {"scale": m.get("scale", None)}
-        if "axis_labels" in m:
-            rv["axis_labels"] = m["axis_labels"]
-        if "units" in m:
-            rv["units"] = m["units"]
-        return rv
+        # check if labels exist and append them as layers
+        if hasattr(img, "labels") and img.labels is not None:
+            label_group = well_group[first_field_path].get("labels")
+            for label_name, label_img in img.labels.items():
+                labels_data = get_pyramid_lazy(self.group, labels_path=label_name)
+                labels_metadata = Label(label_group[label_name]).to_layer_data()[0][1]
+
+                axes_types = tuple(label_img.images[0].axes_types.values())
+                has_channel = "channel" in axes_types
+                channel_index = axes_types.index("channel") if has_channel else None
+                n_channels = (
+                    int(label_img.images[0].data.shape[channel_index])
+                    if has_channel
+                    else 1
+                )
+
+                for ch_idx in range(n_channels):
+                    ch_labels_data = (
+                        [da.take(d, ch_idx, axis=channel_index) for d in labels_data]
+                        if channel_index is not None
+                        else labels_data
+                    )
+
+                    layers.append((ch_labels_data, labels_metadata, "labels"))
+
+        return layers
 
 
 class Labels(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
         return "labels" in Spec.get_attrs(group)
+
+    def to_layer_data(self) -> List[LayerData]:
+        layers: List[LayerData] = []
+        for node in self.iter_nodes():
+            layers.extend(node.to_layer_data())
+        return layers
 
     # override to NOT yield self since node has no data
     def iter_nodes(self) -> Iterable[Spec]:
@@ -667,22 +663,27 @@ class Label(Multiscales):
         from ome_zarr import OMEZarrLabels
 
         ms = OMEZarrLabels.from_ome_zarr(self.group)
+        axes_types = tuple(ms.images[0].axes_types.values())
 
-        has_channel = "c" in ms.images[0].axes
-        channel_index = ms.images[0].axes.index("c") if has_channel else None
-        n_channels = ms.images[0].data.shape[channel_index] if has_channel else 1
+        if "channel" in axes_types:
+            channel_index = axes_types.index("channel")
+            n_channels = ms.images[0].data.shape[channel_index]
+        else:
+            channel_index = None
+            n_channels = 1
 
         labels_layers: List[LayerData] = []
         for ch_idx in range(n_channels):
             data = (
                 [da.take(img.data, ch_idx, axis=channel_index) for img in ms.images]
-                if has_channel
+                if channel_index is not None
                 else [img.data for img in ms.images]
             )
 
-            props = _ome_zarr_ms_to_layer_props(ms, channel_index)
+            props = _ome_zarr_multiscales_to_layer_props(ms, channel_index)
             props["name"] = ms.name
             props["blending"] = "additive"
+            props["visible"] = False
 
             # Get color settings if present
             if (
@@ -717,18 +718,10 @@ class Label(Multiscales):
 
         return labels_layers
 
-    def _splits_channels(self) -> bool:
-        # A label is loaded as a single layer keeping all axes (no per-channel
-        # split), so the channel axis must be retained in the per-axis metadata
-        # to match the layer ndim.
-        return False
-
 
 def read_ome_zarr(root_group: Group) -> Callable:
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         layers: List[LayerData] = list()
-
-        print("Root group", root_group.attrs.asdict())
 
         spec: Spec | None = None
 
