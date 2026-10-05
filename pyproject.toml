@@ -24,8 +24,8 @@ dependencies = [
     "zarr>=3.1.5",
     "requests",
     "aiohttp",
-    "ome-zarr>=0.20.0",
-    "transformnd>=0.6.0",
+    "ome-zarr>=0.20.1",
+    "transformnd>=0.9.2",
 ]
 
 [dependency-groups]
