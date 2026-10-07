@@ -10,6 +10,7 @@ import transformnd as tnd
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
+from ome_zarr.classes.utils import _ozmp_tf_to_tnd
 from zarr import Group
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import SyncMixin
@@ -88,6 +89,70 @@ def _ome_zarr_multiscales_to_layer_props(
     props["scale"] = scale
 
     return props
+
+
+def _resolve_target_affine(
+    ms: OMEZarrMultiscale | OMEZarrLabels,
+    target_coordinate_system: str | None,
+) -> np.ndarray | None:
+    """Affine from the multiscale's intrinsic CS to a named target CS, or None if not requested."""
+    if target_coordinate_system is None:
+        return None
+
+    intrinsic_cs = ms.metadata.intrinsic_coordinate_system
+    if target_coordinate_system == intrinsic_cs.name:
+        # identity, not None - callers rely on "affine" always being present
+        # in props to reset a layer's affine when switching back
+        ch_idx = next(
+            (i for i, ax in enumerate(intrinsic_cs.axes) if ax.type == "channel"), None
+        )
+        return _strip_channel_from_affine(
+            np.eye(len(intrinsic_cs.axes) + 1), ch_idx, ch_idx
+        )
+
+    cs_by_name = {cs.name: cs for cs in ms.metadata.coordinateSystems}
+    target_cs = cs_by_name.get(target_coordinate_system)
+    if target_cs is None:
+        raise ValueError(
+            f"Coordinate system '{target_coordinate_system}' not found in "
+            f"metadata.coordinateSystems: {list(cs_by_name)}"
+        )
+
+    input_ch_idx = next(
+        (i for i, ax in enumerate(intrinsic_cs.axes) if ax.type == "channel"), None
+    )
+    output_ch_idx = next(
+        (i for i, ax in enumerate(target_cs.axes) if ax.type == "channel"), None
+    )
+
+    for tf in ms.metadata.coordinateTransformations or ():
+        if tf.input is None or tf.output is None:
+            continue
+        if (
+            tf.input.name == intrinsic_cs.name
+            and tf.output.name == target_coordinate_system
+        ):
+            tnd_tf = _ozmp_tf_to_tnd(tf, source_cs=intrinsic_cs, target_cs=target_cs)
+            # wrapping in a TransformSequence gives us .simplify() whether tnd_tf is one already or not
+            matrix = tnd.TransformSequence([tnd_tf]).simplify().to_affine().matrix
+            return _strip_channel_from_affine(matrix, input_ch_idx, output_ch_idx)
+        if (
+            tf.output.name == intrinsic_cs.name
+            and tf.input.name == target_coordinate_system
+        ):
+            tnd_tf = _ozmp_tf_to_tnd(tf, source_cs=target_cs, target_cs=intrinsic_cs)
+            inverse = tnd_tf.invert()
+            if inverse is None:
+                raise ValueError(
+                    f"Transform {tf} to '{target_coordinate_system}' is not invertible."
+                )
+            matrix = tnd.TransformSequence([inverse]).simplify().to_affine().matrix
+            return _strip_channel_from_affine(matrix, input_ch_idx, output_ch_idx)
+
+    raise ValueError(
+        f"No coordinate transformation found linking '{intrinsic_cs.name}' to "
+        f"'{target_coordinate_system}'."
+    )
 
 
 def _strip_channel_from_affine(
@@ -252,7 +317,9 @@ class Multiscales(Spec):
     def matches(group: Group) -> bool:
         return "multiscales" in Spec.get_attrs(group)
 
-    def to_layer_data(self) -> List[LayerData]:
+    def to_layer_data(
+        self, target_coordinate_system: str | None = None
+    ) -> List[LayerData]:
         ms = OMEZarrMultiscale.from_ome_zarr(self.group)
 
         data = [img.data for img in ms.images]
@@ -287,6 +354,11 @@ class Multiscales(Spec):
             for label_key in ms.labels.keys():
                 label_spec = Label(self.group[f"labels/{label_key}"])
                 layers.extend(label_spec.to_layer_data())
+
+        affine = _resolve_target_affine(ms, target_coordinate_system)
+        if affine is not None:
+            for lyr in layers:
+                lyr[1]["affine"] = affine
 
         return layers
 

@@ -6,9 +6,15 @@ contributions:
     - id: napari-ome-zarr.get_reader
       title: Get Reader
       python_name: napari_ome_zarr._reader:napari_get_reader
+    - id: napari-ome-zarr.browser
+      title: OME-Zarr Browser
+      python_name: napari_ome_zarr.widgets:OMEZarrBrowser
   readers:
     - command: napari-ome-zarr.get_reader
       filename_patterns:
         - "*.zarr"
         - "*.zarr*"
       accepts_directories: true
+  widgets:
+    - command: napari-ome-zarr.browser
+      display_name: OME-Zarr Browser
