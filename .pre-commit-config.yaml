@@ -7,19 +7,19 @@ repos:
       - id: seed-isort-config
 
   - repo: https://github.com/PyCQA/isort
-    rev: 9.0.0a3
+    rev: 10.0.0b1
     hooks:
       - id: isort
         args: ["--profile", "black", "--filter-files"]
 
   - repo: https://github.com/psf/black-pre-commit-mirror
-    rev: 26.5.1
+    rev: 26.10.1
     hooks:
       - id: black
         args: [--target-version=py36]
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
         args:
@@ -43,7 +43,7 @@ repos:
           - --autofix
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.3.0
+    rev: 7.4.1
     hooks:
       - id: flake8
         additional_dependencies: [
@@ -61,13 +61,13 @@ repos:
         ]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
+    rev: v2.4.0
     hooks:
       - id: mypy
         exclude: tests/|setup.py|docs/conf.py
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
+    rev: v2.4.0
     hooks:
       - id: mypy
         args: [
