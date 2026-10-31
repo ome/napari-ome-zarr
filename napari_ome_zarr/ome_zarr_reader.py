@@ -504,6 +504,7 @@ class FusedScene(Scene):
         from .fused_scene import fuse_scene_layers
 
         scene = OMEZarrScene.from_ome_zarr(self.group)
+        targets: List[tuple[str, str] | None]
         if target_coordinate_system is not None:
             targets = [target_coordinate_system]
         else:

@@ -27,7 +27,7 @@ LayerData = Tuple[List[da.core.Array], Dict[str, Any], str]
 CHUNK_SIZE = 1024
 
 
-def _box_corners(lo, hi) -> np.ndarray:
+def _box_corners(lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
     """All corners of the box [lo, hi], as rows of homogeneous coordinates."""
     corners = np.array(list(itertools.product(*zip(lo, hi))), dtype=float)
     return np.hstack([corners, np.ones((len(corners), 1))])
@@ -81,7 +81,9 @@ class _Placement:
             self.lo = np.floor(corners[:, :-1].min(axis=0)).astype(int)
             self.hi = np.ceil(corners[:, :-1].max(axis=0)).astype(int) + 1
 
-    def read_region(self, lo: np.ndarray, hi: np.ndarray):
+    def read_region(
+        self, lo: np.ndarray, hi: np.ndarray
+    ) -> Tuple[da.core.Array | None, np.ndarray | None]:
         """
         Lazy layer data needed for canvas pixels [lo, hi),
         with the layer index of its first pixel.
@@ -194,7 +196,11 @@ def fuse_layers(layers: List[LayerData], name: str, visible: bool = True) -> Lay
         chunks = (1,) * (ndim - 2) + (CHUNK_SIZE,) * min(ndim, 2)
         canvas_template = da.zeros(shape, chunks=chunks, dtype=dtype)
 
-        def render_chunk(block, block_info=None, _placements=placements):
+        def render_chunk(
+            block: np.ndarray,
+            block_info: Dict | None = None,
+            _placements: List[_Placement] = placements,
+        ) -> np.ndarray:
             if block_info is None or len(block_info) == 0:
                 return block
             loc = block_info[None]["array-location"]
