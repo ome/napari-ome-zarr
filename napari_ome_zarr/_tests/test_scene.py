@@ -8,7 +8,10 @@ from napari_ome_zarr.utils import count_layers_in_scene
 
 
 def open_scene_layers(viewer, path):
-    """Add a layer per scene image and channel (the reader fuses them, see test_fused_scene)."""
+    """
+    Add a layer per scene image and channel
+    (the reader fuses them, see test_fused_scene).
+    """
     for layer_data in Scene(zarr.open_group(str(path), mode="r")).to_layer_data():
         viewer._add_layer_from_data(*layer_data)
 
