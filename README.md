@@ -86,6 +86,22 @@ constructed purely from `coordinateTransformations`.
 Supported `coordinateTransformations` currently include `identity`, `scale`, `translation`, `rotation`, `affine` and `sequence`
 (containing these other transforms).
 
+Optionally, the scene images can be fused into a single layer per channel and label image (`FusedScene`), so
+napari only renders one layer instead of one per image, e.g. for many tiles. This is done in each scene
+`coordinateSystem`: the first is visible, toggle the layer visibility to show another. Each image is placed as it
+would be as a separate layer: images only shifted relative to the fused layer pixels are copied (rounded to whole
+pixels), others (rotated, scaled) are resampled. Overlapping pixels show the maximum value for images, and the last
+non-zero value for labels. Only images with the same channel names and dtype are fused; others are kept as
+separate layers.
+
+To open a scene fused, choose the `napari-ome-zarr.get_fused_reader` reader:
+
+    napari --plugin napari-ome-zarr.get_fused_reader scene.ome.zarr
+
+OR in python::
+
+    viewer.open("scene.ome.zarr", plugin="napari-ome-zarr.get_fused_reader")
+
 ## Contributing
 
 Contributions are very welcome. Tests can be run with [tox], please ensure
