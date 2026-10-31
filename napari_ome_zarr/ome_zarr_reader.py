@@ -492,6 +492,35 @@ class Scene(Spec):
         return layers
 
 
+class FusedScene(Scene):
+    """
+    Scene with its images fused into a single layer per channel and label image,
+    for each scene coordinate system (only the first visible).
+    """
+
+    def to_layer_data(
+        self, target_coordinate_system: tuple[str, str] | None = None
+    ) -> List[LayerData]:
+        from .fused_scene import fuse_scene_layers
+
+        scene = OMEZarrScene.from_ome_zarr(self.group)
+        if target_coordinate_system is not None:
+            targets = [target_coordinate_system]
+        else:
+            # scene coordinate systems; else the Scene default
+            targets = [("", cs.name) for cs in scene.coordinate_systems] or [None]
+
+        layers: List[LayerData] = []
+        for index, target in enumerate(targets):
+            name = target[1] if target is not None else "scene"
+            layers.extend(
+                fuse_scene_layers(
+                    super().to_layer_data(target), scene, name, visible=index == 0
+                )
+            )
+        return layers
+
+
 class Plate(Spec):
     @staticmethod
     def matches(group: Group) -> bool:
@@ -678,7 +707,7 @@ def read_ome_zarr(root_group: Group) -> Callable:
         elif Plate.matches(root_group):
             spec = Plate(root_group)
         elif Scene.matches(root_group):
-            spec = Scene(root_group)
+            spec = FusedScene(root_group)
         else:
             print("No matching spec", root_group)
 

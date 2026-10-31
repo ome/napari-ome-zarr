@@ -1,15 +1,23 @@
 import numpy as np
+import zarr
 from ome_zarr import OMEZarrScene
 
 from napari_ome_zarr._tests.conftest import create_overlap_tiles_scene
+from napari_ome_zarr.ome_zarr_reader import Scene
 from napari_ome_zarr.utils import count_layers_in_scene
+
+
+def open_scene_layers(viewer, path):
+    """Add a layer per scene image and channel (the reader fuses them, see test_fused_scene)."""
+    for layer_data in Scene(zarr.open_group(str(path), mode="r")).to_layer_data():
+        viewer._add_layer_from_data(*layer_data)
 
 
 def test_scene_in_napari(scene_path, make_napari_viewer):
     from napari.layers import Image, Labels
 
     viewer = make_napari_viewer()
-    viewer.open(path=str(scene_path), plugin="napari-ome-zarr")
+    open_scene_layers(viewer, scene_path)
 
     # Check every channel and layer is accounted for
     scene = OMEZarrScene.from_ome_zarr(str(scene_path))
@@ -39,7 +47,7 @@ def test_properties_forwarding(tmp_path, make_napari_viewer):
     path = create_overlap_tiles_scene(tmp_path)
 
     viewer = make_napari_viewer()
-    viewer.open(path=str(path), plugin="napari-ome-zarr")
+    open_scene_layers(viewer, path)
 
     # Make sure we populated the properties correctly
     for layer in viewer.layers:

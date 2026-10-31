@@ -26,6 +26,7 @@ dependencies = [
     "aiohttp",
     "ome-zarr>=0.20.1",
     "transformnd",
+    "scipy",
 ]
 
 [dependency-groups]

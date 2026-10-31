@@ -86,6 +86,23 @@ constructed purely from `coordinateTransformations`.
 Supported `coordinateTransformations` currently include `identity`, `scale`, `translation`, `rotation`, `affine` and `sequence`
 (containing these other transforms).
 
+The reader fuses the scene images into a single layer per channel and label image (`FusedScene`), so napari only
+renders one layer instead of one per image. This is done in each scene `coordinateSystem`: the first is visible,
+toggle the layer visibility to show another. Each image is placed as it would be as a separate layer: images only
+shifted relative to the fused layer pixels are copied (rounded to whole pixels), others (rotated, scaled) are
+resampled. Overlapping pixels show the maximum value for images, and the last non-zero value for labels.
+
+For a layer per image instead, in python:
+
+    import napari
+    import zarr
+    from napari_ome_zarr.ome_zarr_reader import Scene
+
+    viewer = napari.Viewer()
+    for layer_data in Scene(zarr.open_group("scene.ome.zarr", mode="r")).to_layer_data():
+        viewer._add_layer_from_data(*layer_data)
+    napari.run()
+
 ## Contributing
 
 Contributions are very welcome. Tests can be run with [tox], please ensure
