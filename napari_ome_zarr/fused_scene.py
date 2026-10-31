@@ -10,6 +10,7 @@ maximum value for images, and the last non-zero value for labels.
 """
 
 import itertools
+import warnings
 from typing import Any, Dict, List, Tuple
 
 import dask.array as da
@@ -261,6 +262,8 @@ def fuse_scene_layers(
     """
     Fuse the layers of a scene (Scene.to_layer_data) per channel and label image:
     the i-th channel layer, or j-th label layer, of each scene image.
+    Layers are only fused if they have the same dtype, and image layers the same
+    channel name; otherwise they are kept as separate layers.
     """
     groups: Dict[Tuple[str, int, int], List[LayerData]] = {}
     names: Dict[Tuple[str, int, int], List[str]] = {}
@@ -296,9 +299,22 @@ def fuse_scene_layers(
 
     fused = []
     for key, group in groups.items():
+        group_names = set(names[key])
+        dtypes = {layer[0][0].dtype for layer in group}
+        if len(dtypes) > 1 or (key[0] == "image" and len(group_names) > 1):
+            if len(dtypes) > 1:
+                reason = f"different dtypes {sorted(map(str, dtypes))}"
+            else:
+                reason = f"different channel names {sorted(group_names)}"
+            layer_names = [layer[1].get("name") for layer in group]
+            warnings.warn(f"Not fusing {key[0]} layers {layer_names}: {reason}")
+            for data, props, layer_type in group:
+                if not visible:
+                    props = {**props, "visible": False}
+                fused.append((data, props, layer_type))
+            continue
         images = "images" if len(group) > 1 else "image"
         fused_name = f"{coordinate_system} ({len(group)} {images})"
-        group_names = set(names[key])
         name = group_names.pop() if len(group_names) == 1 else f"{key[0]} {key[2]}"
         if name:
             fused_name = f"{fused_name}: {name}"

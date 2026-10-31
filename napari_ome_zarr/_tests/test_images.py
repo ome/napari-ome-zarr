@@ -1,5 +1,5 @@
 from napari_ome_zarr._tests.conftest import bioformats2raw, create_overlap_tiles_scene
-from napari_ome_zarr.utils import count_layers_in_image
+from napari_ome_zarr.utils import count_layers_in_scene
 
 
 def test_images(image_path, make_napari_viewer):
@@ -39,12 +39,11 @@ def test_scenes(tmp_path, make_napari_viewer):
     assert len(viewer.layers) > 0
 
     # count layers in the scene
-    # and compare against napari: the reader fuses the images per channel
-    # and label image, in each scene coordinate system
+    # and compare against napari
     scene = OMEZarrScene.from_ome_zarr(str(path))
-    counted = count_layers_in_image(next(iter(scene.images.values())))
+    counted = count_layers_in_scene(scene)
     n_images = len([layer for layer in viewer.layers if isinstance(layer, Image)])
     n_labels = len([layer for layer in viewer.layers if isinstance(layer, Labels)])
 
-    assert counted["image_layers"] * len(scene.coordinate_systems) == n_images
-    assert counted["label_layers"] * len(scene.coordinate_systems) == n_labels
+    assert counted["image_layers"] == n_images
+    assert counted["label_layers"] == n_labels

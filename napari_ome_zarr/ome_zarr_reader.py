@@ -676,7 +676,9 @@ class Label(Multiscales):
         return labels_layers
 
 
-def read_ome_zarr(root_group: Group) -> Callable:
+def read_ome_zarr(root_group: Group, fused: bool = False) -> Callable:
+    """Reader for the root group; fused: a scene as FusedScene instead of Scene."""
+
     def f(*args: Any, **kwargs: Any) -> List[LayerData]:
         layers: List[LayerData] = list()
 
@@ -707,7 +709,7 @@ def read_ome_zarr(root_group: Group) -> Callable:
         elif Plate.matches(root_group):
             spec = Plate(root_group)
         elif Scene.matches(root_group):
-            spec = FusedScene(root_group)
+            spec = FusedScene(root_group) if fused else Scene(root_group)
         else:
             print("No matching spec", root_group)
 
