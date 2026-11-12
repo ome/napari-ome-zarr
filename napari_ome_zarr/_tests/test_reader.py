@@ -387,9 +387,3 @@ def test_composite_label_names(tmp_path, make_napari_viewer):
 
     # make sure there is a layer with the composite name "test: some_name"
     assert "test: some_name" in [layer.name for layer in layers]
-
-
-if __name__ == "__main__":
-    import pytest
-
-    pytest.main([__file__ + "-k test_composite_label_names"])
