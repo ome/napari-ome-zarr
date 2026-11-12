@@ -1,12 +1,12 @@
 import time
 from typing import Any
 
-from napari.types import LayerData
 import numpy as np
 from napari.qt import create_worker
 from napari.qt.threading import thread_worker
+from napari.types import LayerData
 from napari.utils import progress
-from ome_zarr.classes import OMEZarrImage, OMEZarrMultiscale, OMEZarrLabels
+from ome_zarr.classes import OMEZarrImage, OMEZarrLabels, OMEZarrMultiscale
 
 
 def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
@@ -21,6 +21,7 @@ def write_05_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
 
     # return path to any file(s) that were successfully written
     return [path]
+
 
 def write_06_ome_zarr(path: str, layer_data, attributes: dict) -> list[str]:
     """
@@ -41,6 +42,7 @@ def _save_data(jobs: list["dask.delayed.Delayed"]):
     Save the given list of dask delayed jobs concurrently using a thread worker.
     Each job corresponds to writing a pyramid layer of the OME-Zarr image.
     """
+
     @thread_worker(progress={"total": len(jobs)})
     def save_pyramid_layers(jobs):
         for job in jobs:
@@ -50,21 +52,28 @@ def _save_data(jobs: list["dask.delayed.Delayed"]):
     save_pyramid_layers(jobs).start()
 
 
-def _stack_layers_by_resolution(image_layers: list[LayerData], base_axes: list[str]) -> tuple:
+def _stack_layers_by_resolution(
+    image_layers: list[LayerData], base_axes: list[str]
+) -> tuple:
     """Stack all image layers into a channel dimension at each resolution level."""
     # Normalize each layer to multiscale format (list of scales)
     normalized = []
     for data, attrs in image_layers:
         normalized.append(data if attrs.get("multiscale", False) else [data])
-    
+
     # Stack by resolution level
     num_levels = max(len(scales) for scales in normalized)
-    stacked_scales = [np.stack([scales[i] for scales in normalized], axis=0) for i in range(num_levels)]
-    
+    stacked_scales = [
+        np.stack([scales[i] for scales in normalized], axis=0)
+        for i in range(num_levels)
+    ]
+
     return stacked_scales, ["c"] + base_axes
 
 
-def multiple_layers_to_ome_zarr(path: str, layers_data: list[LayerData]) -> OMEZarrMultiscale:
+def multiple_layers_to_ome_zarr(
+    path: str, layers_data: list[LayerData]
+) -> OMEZarrMultiscale:
     """
     Writer for multiple layers that assumes that the layers can be
     combined into multiple channels of the same image OR multiple label images.
@@ -74,8 +83,12 @@ def multiple_layers_to_ome_zarr(path: str, layers_data: list[LayerData]) -> OMEZ
     """
     axes = layers_data[0][1]["axis_labels"]
 
-    image_layers: list[LayerData] = [layer for layer in layers_data if layer[1].get("type") == "image"]
-    label_layers: list[LayerData] = [layer for layer in layers_data if layer[1].get("type") == "labels"]
+    image_layers: list[LayerData] = [
+        layer for layer in layers_data if layer[1].get("type") == "image"
+    ]
+    label_layers: list[LayerData] = [
+        layer for layer in layers_data if layer[1].get("type") == "labels"
+    ]
 
     # stack image layers into a single multiscale image
     # Check whether all image layers are multiscale
@@ -100,10 +113,11 @@ def multiple_layers_to_ome_zarr(path: str, layers_data: list[LayerData]) -> OMEZ
         img_ms.labels = label_imgs
 
     return img_ms
-        
 
 
-def _napari_layer_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZarrMultiscale | OMEZarrLabels:
+def _napari_layer_to_ome_zarr(
+    path: str, layer_data, attributes: dict
+) -> OMEZarrMultiscale | OMEZarrLabels:
     """
     Convert the given layer data and attributes into an OME-Zarr multiscale image.
     If the image is not already a multiscale, a single-scale image is converted into a multiscale.
@@ -118,7 +132,9 @@ def _napari_layer_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZar
         raise ValueError(f"Unsupported layer type: {layer_data[2]}")
 
 
-def _napari_image_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZarrMultiscale:
+def _napari_image_to_ome_zarr(
+    path: str, layer_data, attributes: dict
+) -> OMEZarrMultiscale:
     """
     Convert a napari image layer to an OME-Zarr multiscale image class.
     """
@@ -146,7 +162,6 @@ def _napari_image_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZar
         )
         return img_ms
 
-    
     # If the image is already a multiscale, use the provided resolution levels
     resolution_levels: list = []
     for i in range(len(layer_data)):
@@ -166,7 +181,9 @@ def _napari_image_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZar
     return img_ms
 
 
-def _napari_labels_to_ome_zarr(path: str, layer_data, attributes: dict) -> OMEZarrLabels:
+def _napari_labels_to_ome_zarr(
+    path: str, layer_data, attributes: dict
+) -> OMEZarrLabels:
     """
     Convert a napari labels layer to an OME-Zarr labels class.
     """
