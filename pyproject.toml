@@ -37,7 +37,7 @@ test = [
     "pooch",
     "pytest-qt",
     "qtpy",
-    "pyqt5",
+    "pyqt6",
 ]
 
 [project.entry-points."napari.manifest"]
