@@ -376,7 +376,9 @@ def test_composite_label_names(tmp_path, make_napari_viewer):
     labels.metadata = labels.metadata.model_copy(update={"name": "some_name"})
 
     image.labels = {"test": labels}
-    image.to_ome_zarr(str(tmp_path / "test_composite_label_names.ome.zarr"), overwrite=True)
+    image.to_ome_zarr(
+        str(tmp_path / "test_composite_label_names.ome.zarr"), overwrite=True
+    )
 
     viewer = make_napari_viewer()
     layers = viewer.open(
@@ -386,6 +388,8 @@ def test_composite_label_names(tmp_path, make_napari_viewer):
     # make sure there is a layer with the composite name "test: some_name"
     assert "test: some_name" in [layer.name for layer in layers]
 
+
 if __name__ == "__main__":
     import pytest
+
     pytest.main([__file__ + "-k test_composite_label_names"])

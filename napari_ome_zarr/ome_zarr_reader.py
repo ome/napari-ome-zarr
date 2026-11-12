@@ -609,7 +609,7 @@ class Label(Multiscales):
             )
 
             props = _ome_zarr_multiscales_to_layer_props(ms, channel_index)
-            
+
             # Layer name is composite of group name and metadata name if available
             # if group name and metadata name are identical, just use group name
             group_name = self.group.name.split("/")[-1]
