@@ -609,7 +609,12 @@ class Label(Multiscales):
             )
 
             props = _ome_zarr_multiscales_to_layer_props(ms, channel_index)
-            props["name"] = ms.name
+            
+            # Layer name is composite of group name and metadata name if available
+            group_name = self.group.name.split("/")[-1] or "labels"
+            props["name"] = f"{group_name}: {ms.name}" if ms.name and ms.name != "image" else group_name
+
+            # Display properties
             props["blending"] = "additive"
             props["visible"] = False
 
