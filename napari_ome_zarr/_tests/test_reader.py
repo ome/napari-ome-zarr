@@ -364,3 +364,26 @@ def test_missing_units(tmp_path, make_napari_viewer):
     )[0]
 
     assert layer.units == ("pixel", "meter", "meter")
+
+
+def test_composite_label_names(tmp_path, make_napari_viewer):
+    """
+    Test to make sure that composite label layer names are correctly generated.
+    """
+    from ome_zarr.data import coins
+
+    image, labels = coins()
+    labels.metadata = labels.metadata.model_copy(update={"name": "some_name"})
+
+    image.labels = {"test": labels}
+    image.to_ome_zarr(
+        str(tmp_path / "test_composite_label_names.ome.zarr"), overwrite=True
+    )
+
+    viewer = make_napari_viewer()
+    layers = viewer.open(
+        str(tmp_path / "test_composite_label_names.ome.zarr"), plugin="napari-ome-zarr"
+    )
+
+    # make sure there is a layer with the composite name "test: some_name"
+    assert "test: some_name" in [layer.name for layer in layers]
