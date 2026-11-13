@@ -82,6 +82,10 @@ Currently, the reader ingests the following properties into napari layers:
   - For group name `labels/some_segmentation` and `name: label_image`, the layer name becomes `some_segmentation: label_image`
   - For identical group name and `name` field, the layer name becomes just the group name.
   - For group name `labels/another_segmentation` and unset `name` field, the layer name becomes `another_segmentation`
+- Transformations:
+  An layer's `scale` property is determined only from the OME-Zarr's lowest resolution level's scale transformation.
+  Other coordinate transformations are automatically determined (i.e. for [0.6 scenes](https://ngff.openmicroscopy.org/specifications/0.6/index.html#scene)),
+  and are stored in the layer's `affine` property.
 
 
 
