@@ -123,7 +123,3 @@ def test_properties_forwarding(tmp_path, make_napari_viewer):
             for label_name, label_img in ms_image.labels.items():
                 layer = viewer.layers[label_name]
                 assert np.array_equal(layer.affine.affine_matrix, affine)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-k", "test_projection_to_tczyx_affine_shape"])
