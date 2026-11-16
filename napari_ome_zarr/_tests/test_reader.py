@@ -220,9 +220,7 @@ def test_units_forwarded(tmp_path: Path):
         ),
     ],
 )
-def test_default_channel_colormaps_without_omero(
-    tmp_path: Path, shape, axes, expected
-):
+def test_default_channel_colormaps_without_omero(tmp_path: Path, shape, axes, expected):
     """
     Without omero metadata, a channel axis gets CMYBGR colormaps; an image
     without one stays grayscale.
