@@ -32,6 +32,14 @@ AXES_5D = [
 DEFAULT_SCALE = 1.0
 DEFAULT_UNIT = "pixel"
 DEFAULT_AXIS_LABEL = "Unknown"
+DEFAULT_CHANNEL_COLORS = [
+    [0, 1, 1],  # cyan
+    [1, 0, 1],  # magenta
+    [1, 1, 0],  # yellow
+    [0, 0, 1],  # blue
+    [0, 1, 0],  # green
+    [1, 0, 0],  # red
+]
 
 
 def _match_colors_to_available_colormap(custom_cmap: Colormap) -> Colormap:
@@ -158,6 +166,31 @@ def _expand_affine_for_projection(
     return tnd.TransformSequence(updated_transforms).simplify().to_affine().matrix
 
 
+def _default_channel_props(
+    multiscales: OMEZarrMultiscale | OMEZarrLabels,
+) -> List[Dict[str, Any]] | None:
+    """
+    Fallback for images without omero metadata: cycle CMYBGR colormaps over the
+    channel axis. Returns None (grayscale) if there is no channel axis.
+    """
+    img = multiscales.images[0]
+    axes_types = tuple(img.axes_types.values())
+    if "channel" not in axes_types:
+        return None
+
+    n_channels = int(img.data.shape[axes_types.index("channel")])
+    return [
+        {
+            "colormap": _match_colors_to_available_colormap(
+                Colormap(
+                    [[0, 0, 0], DEFAULT_CHANNEL_COLORS[i % len(DEFAULT_CHANNEL_COLORS)]]
+                )
+            )
+        }
+        for i in range(n_channels)
+    ]
+
+
 def _extract_channel_props(
     multiscales: OMEZarrMultiscale | OMEZarrLabels,
 ) -> List[Dict[str, Any]] | None:
@@ -165,11 +198,11 @@ def _extract_channel_props(
     Helper function to extract per-channel properties (colormap, name,
     visible, contrast_limits) from an OME-Zarr multiscale or label image's
     omero metadata. Returns one dict per channel, or None if there's no
-    omero metadata.
+    omero metadata and no channel axis to color.
     """
 
     if not (hasattr(multiscales, "omero") and multiscales.omero is not None):
-        return None
+        return _default_channel_props(multiscales)
 
     omero = multiscales.omero.model_dump()
     model = omero.get("rdefs", {}).get("model", "unset")
