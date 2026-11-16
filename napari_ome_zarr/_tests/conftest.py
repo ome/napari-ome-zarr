@@ -181,6 +181,51 @@ def create_YXto_ZYX_scene(tmp_path):
     return path
 
 
+def create_to_TCZYX_scene(tmp_path, input_axes):
+    """
+    Write a scene that projects a `input_axes` image ("czyx" or "zyx") into a
+    tczyx image to `path`.
+    """
+    in_shape, created = {
+        "czyx": ((2, 16, 64, 64), [0]),
+        "zyx": ((16, 64, 64), [0, 1]),
+    }[input_axes]
+    oz_in = OMEZarrImage(
+        data=np.zeros(in_shape, dtype=np.uint8),
+        axes=list(input_axes),
+        scale={ax: 1 for ax in input_axes},
+        name=f"{input_axes}_input",
+    )
+    tczyx = CoordinateSystem(
+        name="tczyx",
+        axes=(
+            Axis(name="t", type="time"),
+            Axis(name="c", type="channel"),
+            Axis(name="z", type="space", unit="micrometer"),
+            Axis(name="y", type="space", unit="micrometer"),
+            Axis(name="x", type="space", unit="micrometer"),
+        ),
+    )
+
+    transform = Sequence.model_validate(
+        {
+            "type": "sequence",
+            "input": {"path": f"{input_axes}_input", "name": "physical"},
+            "output": {"name": "tczyx"},
+            "transformations": [{"type": "projectAxis", "createdOutputs": created}],
+        }
+    )
+
+    scene = OMEZarrScene(
+        images=[OMEZarrMultiscale(oz_in)],
+        coordinate_systems=(tczyx,),
+        coordinate_transformations=[transform],
+    )
+    path = tmp_path / f"scene_{input_axes}_to_TCZYX.ome.zarr"
+    scene.to_ome_zarr(str(path), overwrite=True)
+    return path
+
+
 def _plain_image(path):
     create_zarr(str(path))
     return path

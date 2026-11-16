@@ -1,8 +1,33 @@
 import numpy as np
+import pytest
 from ome_zarr import OMEZarrScene
 
-from napari_ome_zarr._tests.conftest import create_overlap_tiles_scene
+from napari_ome_zarr._tests.conftest import (
+    create_overlap_tiles_scene,
+    create_to_TCZYX_scene,
+)
 from napari_ome_zarr.utils import count_layers_in_scene
+
+
+@pytest.mark.parametrize("input_axes", ["czyx", "zyx"])
+def test_projection_to_tczyx_affine_shape(tmp_path, make_napari_viewer, input_axes):
+    """
+    Projecting into tczyx must yield layer affines matching each layer's ndim.
+    A projected time axis should be added as a singleton dimension
+    """
+    path = create_to_TCZYX_scene(tmp_path, input_axes)
+
+    viewer = make_napari_viewer()
+    viewer.open(path=str(path), plugin="napari-ome-zarr")
+
+    # check that layers appeared in the viewer
+    assert len(viewer.layers) > 0
+    for layer in viewer.layers:
+        assert layer.affine.affine_matrix.shape == (layer.ndim + 1, layer.ndim + 1)
+
+    # check that leading dimension (time) is a singleton dimension
+    for layer in viewer.layers:
+        assert layer.data[0].shape[0] == 1
 
 
 def test_scene_in_napari(scene_path, make_napari_viewer):
@@ -98,3 +123,7 @@ def test_properties_forwarding(tmp_path, make_napari_viewer):
             for label_name, label_img in ms_image.labels.items():
                 layer = viewer.layers[label_name]
                 assert np.array_equal(layer.affine.affine_matrix, affine)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-k", "test_projection_to_tczyx_affine_shape"])
