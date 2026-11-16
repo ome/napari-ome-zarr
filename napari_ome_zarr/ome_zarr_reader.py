@@ -430,13 +430,14 @@ class Scene(Spec):
             n_extra = len(output_spatial) - len(input_spatial)
             if n_extra > 0:
                 # indices are in the full output CS space (may include a
-                # channel axis, created or pre-existing); layer data/props
+                # channel/time axis, created or pre-existing); layer data/props
                 # never have channel, so drop created channel entries and
                 # shift every space index past the channel position down by 1.
                 created_output_idxs = [
                     i - 1 if output_ch_idx is not None and output_ch_idx < i else i
                     for i in (project_tf.created if project_tf else [])
                     if output_cs_obj.axes[i].type == "space"
+                    or output_cs_obj.axes[i].type == "time"
                 ]
 
                 # Insert singleton dimensions in layer data and update props.
@@ -475,13 +476,15 @@ class Scene(Spec):
                     # update layer data tuple
                     _layers[idx] = (layer_data, layer_props, lyr[2])
 
-            # _expand_affine_for_projection always pads a pseudo input column for
-            # every created output axis (synthesizing an Identity pre-transform if
-            # none existed). If channel was one of those created axes, that pseudo
-            # input column lands at output_ch_idx, not input_ch_index (None, since
-            # the true input has no channel).
+            # Expanded affine inputs are in output ordering. A created channel's
+            # pseudo input column sits at output_ch_idx; otherwise shift the real
+            # input channel past every created axis at or before it.
             if project_tf is not None and output_ch_idx in project_tf.created:
                 input_ch_index = output_ch_idx
+            elif project_tf is not None and input_ch_index is not None:
+                for created_idx in sorted(project_tf.created):
+                    if created_idx <= input_ch_index:
+                        input_ch_index += 1
 
             affine = _strip_channel_from_affine(affine, input_ch_index, output_ch_idx)
 
