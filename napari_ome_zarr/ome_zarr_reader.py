@@ -1,6 +1,7 @@
 # zarr v3
 
 from abc import ABC
+from itertools import count
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 from xml.etree import ElementTree as ET
 
@@ -305,23 +306,41 @@ class Bioformats2raw(Spec):
         return layers
 
     def children(self) -> list[Multiscales]:
-        # lookup children from series of OME/METADATA.xml
+        return [
+            Multiscales(group)
+            for group in self._image_groups()
+            if isinstance(group, Group) and Multiscales.matches(group)
+        ]
+
+    def _image_groups(self) -> Iterable[Group | zarr.Array]:
         xml_data = SyncMixin()._sync(
             self.group.store.get(
                 "OME/METADATA.ome.xml", prototype=default_buffer_prototype()
             )
         )
-        root = ET.fromstring(xml_data.to_bytes())
-        rv: list[Multiscales] = []
-        for child in root:
-            # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
-            node_id = child.attrib.get("ID", "")
-            if child.tag.endswith("Image") and node_id.startswith("Image:"):
-                image_path = node_id.replace("Image:", "")
-                g = self.group[image_path]
-                if Multiscales.matches(g):
-                    rv.append(Multiscales(g))
-        return rv
+        if xml_data is not None:
+            for child in ET.fromstring(xml_data.to_bytes()):
+                # {http://www.openmicroscopy.org/Schemas/OME/2016-06}Image
+                node_id = child.attrib.get("ID", "")
+                if child.tag.endswith("Image") and node_id.startswith("Image:"):
+                    image_path = node_id.replace("Image:", "")
+                    yield self.group[image_path]
+            return
+
+        ome_group = self.group.get("OME")
+        if isinstance(ome_group, Group):
+            series = self.get_attrs(ome_group).get("series")
+            if series is not None:
+                for image_path in series:
+                    yield self.group[image_path]
+                return
+
+        # Without a series list, image groups are numbered consecutively from 0.
+        for index in count():
+            group = self.group.get(str(index))
+            if group is None:
+                break
+            yield group
 
     # override to NOT yield self since node has no data
     def iter_nodes(self) -> Iterable[Spec]:

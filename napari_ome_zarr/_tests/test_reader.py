@@ -7,6 +7,7 @@ import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr import OMEZarrMultiscale
 from ome_zarr.data import astronaut, create_zarr
+from ome_zarr.format import format_from_version
 from ome_zarr.writer import (
     write_image,
     write_labels,
@@ -158,6 +159,42 @@ class TestNapari:
         filename = str(self.path_3d / "labels" / "astronaut_labels")
         layers = napari_get_reader(filename)()
         self.assert_layers(layers, True, False)
+
+
+@pytest.mark.parametrize("version, zarr_format", [("0.4", 2), ("0.5", 3)])
+@pytest.mark.parametrize("has_series", [False, True])
+def test_bioformats2raw_without_xml(tmp_path, version, zarr_format, has_series):
+    path = tmp_path / "series.ome.zarr"
+    root = zarr.open_group(str(path), mode="w", zarr_format=zarr_format)
+    layout = {"bioformats2raw.layout": 3}
+    root.attrs.update(
+        {"ome": {"version": version, **layout}} if zarr_format == 3 else layout
+    )
+
+    if has_series:
+        image_paths = ["tiles/second", "first"]
+        series = {"series": image_paths}
+        root.create_group("OME").attrs.update(
+            {"ome": {"version": version, **series}} if zarr_format == 3 else series
+        )
+    else:
+        image_paths = ["0", "1"]
+
+    for index, image_path in enumerate(image_paths):
+        write_image(
+            image=np.full((8, 8), index, dtype=np.uint8),
+            group=root.create_group(image_path),
+            fmt=format_from_version(version),
+            axes="yx",
+            name=image_path,
+            scale_factors=[2],
+        )
+
+    layers = napari_get_reader(str(path))()
+    assert [metadata["name"] for _, metadata, _ in layers] == image_paths
+    for index, (data, _, layer_type) in enumerate(layers):
+        assert layer_type == "image"
+        np.testing.assert_array_equal(data[0].compute(), index)
 
 
 @pytest.mark.parametrize(
