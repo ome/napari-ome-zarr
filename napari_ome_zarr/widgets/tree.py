@@ -54,7 +54,7 @@ class ZarrTree(QTreeWidget):
             return  # already populated
         group = item.data(0, Qt.ItemDataRole.UserRole)
         item.takeChildren()
-        for name, node in group.members():
+        for name, node in sorted(group.members(), key=lambda member: member[0].casefold()):
             item.addChild(self._make_item(name, node))
 
     def _on_selection_changed(self) -> None:
