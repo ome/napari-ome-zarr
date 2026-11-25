@@ -198,6 +198,52 @@ def test_units_forwarded(tmp_path: Path):
     assert metadata["units"] == ("micrometer", "micrometer", "micrometer")
 
 
+@pytest.mark.parametrize(
+    ("shape", "axes", "expected"),
+    [
+        (
+            (3, 8, 8),
+            [
+                {"name": "c", "type": "channel"},
+                {"name": "y", "type": "space"},
+                {"name": "x", "type": "space"},
+            ],
+            ["cyan", "magenta", "yellow"],
+        ),
+        (
+            (8, 8),
+            [
+                {"name": "y", "type": "space"},
+                {"name": "x", "type": "space"},
+            ],
+            [None],
+        ),
+    ],
+)
+def test_default_channel_colormaps_without_omero(tmp_path: Path, shape, axes, expected):
+    """
+    Without omero metadata, a channel axis gets CMYBGR colormaps; an image
+    without one stays grayscale.
+    """
+    path = tmp_path / "no_omero.zarr"
+    grp = zarr.open_group(str(path), mode="w")
+    write_image(
+        image=np.zeros(shape, dtype=np.uint8),
+        group=grp,
+        axes=axes,
+        axes_units={"y": "micrometer", "x": "micrometer"},
+    )
+
+    layers = napari_get_reader(str(path))()
+    names = [
+        metadata["colormap"].name if "colormap" in metadata else None
+        for _, metadata, _ in layers
+    ]
+
+    # Check that the extracted (default) colormap names match the expected ones
+    assert names == expected
+
+
 def test_label_with_channel_axis_keeps_all_axes(tmp_path: Path):
     """A label is one un-split layer, so it must keep the channel axis in its
     axis_labels (regression: previously the channel axis was dropped from
@@ -364,3 +410,26 @@ def test_missing_units(tmp_path, make_napari_viewer):
     )[0]
 
     assert layer.units == ("pixel", "meter", "meter")
+
+
+def test_composite_label_names(tmp_path, make_napari_viewer):
+    """
+    Test to make sure that composite label layer names are correctly generated.
+    """
+    from ome_zarr.data import coins
+
+    image, labels = coins()
+    labels.metadata = labels.metadata.model_copy(update={"name": "some_name"})
+
+    image.labels = {"test": labels}
+    image.to_ome_zarr(
+        str(tmp_path / "test_composite_label_names.ome.zarr"), overwrite=True
+    )
+
+    viewer = make_napari_viewer()
+    layers = viewer.open(
+        str(tmp_path / "test_composite_label_names.ome.zarr"), plugin="napari-ome-zarr"
+    )
+
+    # make sure there is a layer with the composite name "test: some_name"
+    assert "test: some_name" in [layer.name for layer in layers]
