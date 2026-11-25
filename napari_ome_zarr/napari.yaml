@@ -18,3 +18,7 @@ contributions:
   widgets:
     - command: napari-ome-zarr.browser
       display_name: OME-Zarr Browser
+  menus:
+    napari/file/io_utilities:
+      - command: napari-ome-zarr.browser
+        display_name: OME-Zarr Browser
