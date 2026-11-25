@@ -10,7 +10,7 @@ import transformnd as tnd
 import zarr
 from napari.utils.colormaps import AVAILABLE_COLORMAPS, Colormap
 from ome_zarr import OMEZarrLabels, OMEZarrMultiscale, OMEZarrScene
-from ome_zarr.classes.utils import _ozmp_tf_to_tnd
+from ome_zarr.classes.tnd_utils import ozmp_tf_to_tnd_spaced
 from zarr import Group
 from zarr.core.buffer import default_buffer_prototype
 from zarr.core.sync import SyncMixin
@@ -140,7 +140,9 @@ def _resolve_target_affine(
             tf.input.name == intrinsic_cs.name
             and tf.output.name == target_coordinate_system
         ):
-            tnd_tf = _ozmp_tf_to_tnd(tf, source_cs=intrinsic_cs, target_cs=target_cs)
+            tnd_tf = ozmp_tf_to_tnd_spaced(
+                tf, source_cs=intrinsic_cs, target_cs=target_cs
+            )
             # wrapping in a TransformSequence gives us .simplify() whether tnd_tf is one already or not
             matrix = tnd.TransformSequence([tnd_tf]).simplify().to_affine().matrix
             return _strip_channel_from_affine(matrix, input_ch_idx, output_ch_idx)
@@ -148,7 +150,9 @@ def _resolve_target_affine(
             tf.output.name == intrinsic_cs.name
             and tf.input.name == target_coordinate_system
         ):
-            tnd_tf = _ozmp_tf_to_tnd(tf, source_cs=target_cs, target_cs=intrinsic_cs)
+            tnd_tf = ozmp_tf_to_tnd_spaced(
+                tf, source_cs=target_cs, target_cs=intrinsic_cs
+            )
             inverse = tnd_tf.invert()
             if inverse is None:
                 raise ValueError(
