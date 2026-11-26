@@ -6,9 +6,9 @@ import napari
 import zarr
 from magicgui.widgets import Container, Label
 
-from ..ome_zarr_reader import Multiscales
+from ..ome_zarr_reader import Multiscales, Scene
 from .connect import ConnectionForm
-from .multiscales import MultiscalesWidget
+from .node_widgets import MultiscalesWidget, SceneWidget
 from .tree import ZarrTree
 
 
@@ -74,6 +74,8 @@ class OMEZarrBrowser(Container):
         """
         if isinstance(node, zarr.Group) and Multiscales.matches(node):
             self._show_node_widget(MultiscalesWidget(self._viewer, node))
+        elif isinstance(node, zarr.Group) and Scene.matches(node):
+            self._show_node_widget(SceneWidget(self._viewer, node))
         elif isinstance(node, zarr.Array):
             self._show_node_widget(None)
         else:

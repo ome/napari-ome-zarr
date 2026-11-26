@@ -5,7 +5,7 @@ from __future__ import annotations
 import zarr
 from qtpy.QtCore import Qt, Signal
 from qtpy.QtWidgets import QTreeWidget, QTreeWidgetItem
-from napari_ome_zarr.ome_zarr_reader import Multiscales
+from napari_ome_zarr.ome_zarr_reader import Multiscales, Scene
 
 _LOADING = "..."  # placeholder child, swapped for real children on first expand
 
@@ -37,6 +37,9 @@ class ZarrTree(QTreeWidget):
             if Multiscales.matches(node):
                 icon = "🖼️"
                 node_type = "Multiscales"
+            elif Scene.matches(node):
+                icon = "🎬"
+                node_type = "Scene"
             item = QTreeWidgetItem([f"{icon} {name} ({node_type})"])
             item.setData(0, Qt.ItemDataRole.UserRole, node)
             item.addChild(QTreeWidgetItem([_LOADING]))  # shows expand arrow

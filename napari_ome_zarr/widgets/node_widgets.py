@@ -80,3 +80,70 @@ class MultiscalesWidget(Container):
             if props is not None and "affine" in props:
                 layer.affine = props["affine"]
 
+
+class SceneWidget(Container):
+    status_changed = Signal(str)
+
+    def __init__(self, viewer: Any, group: zarr.Group):
+        super().__init__()
+        self.native.setObjectName("sceneWidget")
+        self.native.setStyleSheet(
+            "#sceneWidget { border: 1px solid gray; border-radius: 4px; }"
+        )
+        self._viewer = viewer
+        self._group = group
+        self._managed_layers: list[Any] = []
+
+        scene = OMEZarrScene.from_ome_zarr(group)
+        coordinate_systems = scene.get_coordinate_system().keys()
+
+        self._cs_dropdown = ComboBox(
+            choices=[f"{path}: {name}" for (path, name) in coordinate_systems],
+            value=f"{list(coordinate_systems)[0][0]}: {list(coordinate_systems)[0][1]}",
+            label="Coordinate System",
+        )
+        self._cs_dropdown.changed.connect(self._on_cs_changed)
+        self._load_button = PushButton(text="Load")
+        self._load_button.clicked.connect(self.load)
+
+        self.append(self._cs_dropdown)
+        self.append(self._load_button)
+
+    def load(self) -> None:
+        self._load_button.enabled = False
+        self._managed_layers.clear()
+        self.status_changed.emit("Loading...")
+        try:
+            target_cs = tuple(self._cs_dropdown.value.split(": "))
+            for data, props, layer_type in Scene(self._group).to_layer_data(
+                target_coordinate_system=target_cs
+            ):
+                layer = getattr(self._viewer, f"add_{layer_type}")(
+                    data, **props
+                )
+                self._managed_layers.append(layer)
+            self.status_changed.emit(
+                f"Loaded {len(self._managed_layers)} layer(s)"
+            )
+        except Exception as error:
+            self.status_changed.emit(
+                f"Failed to load: {type(error).__name__}: {error}"
+            )
+        finally:
+            self._load_button.enabled = True
+
+    def _on_cs_changed(self) -> None:
+
+        target_cs = tuple(self._cs_dropdown.value.split(": "))
+        if not self._managed_layers:
+            return
+        new_by_name = {
+            props.get("name"): props
+            for _, props, _ in Scene(self._group).to_layer_data(
+                target_coordinate_system=target_cs
+            )
+        }
+        for layer in self._managed_layers:
+            props = new_by_name.get(layer.name)
+            if props is not None and "affine" in props:
+                layer.affine = props["affine"]
