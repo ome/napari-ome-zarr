@@ -6,10 +6,10 @@ from typing import Any
 
 import zarr
 from magicgui.widgets import ComboBox, Container, PushButton
-from ome_zarr import OMEZarrMultiscale
+from ome_zarr import OMEZarrMultiscale, OMEZarrScene
 from psygnal import Signal
 
-from ..ome_zarr_reader import Multiscales
+from ..ome_zarr_reader import Multiscales, Scene
 
 
 class MultiscalesWidget(Container):
@@ -79,3 +79,4 @@ class MultiscalesWidget(Container):
             props = new_by_name.get(layer.name)
             if props is not None and "affine" in props:
                 layer.affine = props["affine"]
+
